@@ -15,6 +15,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const MIN_CODE_LENGTH_FOR_SELECTION = 10; // Threshold to consider page selection too short
 
     function refreshUIStates() {
+
+        //The !! (double exclamation mark) is a common JavaScript idiom that converts any value to its corresponding boolean value (true or false).
+        //geminiApiKey could be null, undefined, an empty string, or a string containing the API key.
+        //The expression !!geminiApiKey will be:
+    //    true if geminiApiKey is any "truthy" value (for example, a non-empty string containing an API key).
+    //   false if geminiApiKey is "falsy" (for example, null, undefined, "" (empty string), 0, or false).
         const hasApiKey = !!geminiApiKey;
         getComplexityOnlyButton.disabled = !hasApiKey;
         explainComplexityButton.disabled = !hasApiKey;
