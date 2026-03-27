@@ -7,8 +7,7 @@
     "activeTab",
     "scripting",
     "storage",
-    "contextMenus",
-    "clipboardRead"
+    "contextMenus"
   ],
   "action": {},
   "background": {
@@ -27,8 +26,7 @@
       "activeTab": "Required to analyze the currently open code in the browser tab.",
       "scripting": "Needed to inject scripts into pages for analyzing code snippets selected by the user.",
       "storage": "Used to save user preferences and API keys securely within the extension.",
-      "contextMenus": "Allows adding a right-click menu option for quick code analysis.",
-      "clipboardRead": "Enables reading code directly from the clipboard for analysis."
+      "contextMenus": "Allows adding a right-click menu option for quick code analysis."
     },
     "remote_code": "Remote Gemini API is used to analyze code and generate complexity/quality feedback."
   }

@@ -29,8 +29,7 @@ Quickly analyze code snippets from any webpage for time/space complexity and cod
     *   *(Need a key? See "Get Your Gemini API Key" below.)*
 
 2.  **Analyze Code:**
-    *   On any webpage, select the code snippet you want to analyze.
-    *   **Important:** Press `Ctrl+C` (Windows/Linux) or `Cmd+C` (Mac) to copy the selected code. This ensures the tool works reliably, especially on sites like GFG, CodeChef, etc.
+    *   Open any webpage that contains a code snippet you want to analyze.
     *   Click the extension icon in your Chrome toolbar.
     *   Choose an analysis option:
         *   **Get Time/Space Complexity (O notation)**
@@ -42,13 +41,13 @@ Quickly analyze code snippets from any webpage for time/space complexity and cod
 
 1.  Visit [Google AI Studio](https://aistudio.google.com/apikey).
 2.  Sign in and create a new API key.
-    *   The free tier for the `gemini-1.5-flash-latest` model is recommended and usually sufficient.
+    *   This extension uses the `gemini-2.5-flash` model.
 3.  Copy the generated API key.
 4.  Paste it into the extension's "Options" page as described in "How to Use".
 
 ## Notes & Troubleshooting
 
-*   **Selection Issues on GFG, CodeChef, etc.?:** Always **copy (Ctrl+C / Cmd+C)** the code after selecting it. The extension will automatically use the clipboard content if direct page selection fails.
+*   **Extraction Issues on GFG, CodeChef, etc.?:** The extension extracts code directly from the page DOM. If a site uses a custom renderer, make sure the code block is visible on the page before opening the extension.
 *   **"API Key not set":** Ensure your key is saved in the extension's "Options".
 *   **API Errors:** Check your API key. You might have hit free tier limits (check Google AI Studio). Very long code snippets could also cause issues, but this is rare for typical selections.
 

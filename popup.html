@@ -11,15 +11,36 @@
     <div id="header">
       <h1 id="title">Code Analyzer</h1>
       <div id="apiKeyMessage">API status will load here...</div>
+      <div id="apiKeyEditor" class="api-key-editor">
+        <input id="apiKeyInput" class="api-key-input" type="password" placeholder="Enter Gemini API Key" autocomplete="off">
+        <div class="api-key-actions">
+          <button id="toggleApiKeyEditor" class="secondary-button" type="button">Edit API Key</button>
+          <button id="saveApiKeyInline" class="secondary-button" type="button">Save Key</button>
+        </div>
+        <div id="apiKeyEditorStatus" class="api-key-editor-status"></div>
+      </div>
     </div>
 
     <div class="button-group">
       <button id="getComplexityOnly" class="action-button" disabled>Get Time/Space Complexity (O notation)</button>
       <button id="explainComplexity" class="action-button" disabled>Explain Time/Space Complexity</button>
       <button id="getCodeFeedback" class="action-button" disabled>Get Code Quality Feedback</button>
+      <button id="getExtraTestCases" class="action-button" disabled>Generate Extra Test Cases</button>
+      <button id="getAlternateApproaches" class="action-button" disabled>Alternate Approaches</button>
+      <button id="getHints" class="action-button" disabled>Get Hints</button>
     </div>
 
     <div id="resultsContainer">
+      <div id="extractedCodeContainer" class="extracted-code-container">
+        <div class="extracted-code-header">
+          <span>Extracted Code</span>
+          <div class="extracted-code-actions">
+            <button id="toggleExtractedCode" class="secondary-button" type="button">Show Code</button>
+            <button id="refreshCodePreview" class="secondary-button" type="button">Refresh Preview</button>
+          </div>
+        </div>
+        <pre id="extractedCodePreview" class="extracted-code-preview is-collapsed">Loading extracted code from the live page...</pre>
+      </div>
       <div id="complexityDirectOutput" class="result-content" style="display: none;">
         <div class="complexity-item">
           <span class="complexity-label">Time Complexity:</span>
@@ -32,8 +53,8 @@
       </div>
       <!-- Updated initial message area -->
       <div id="results" class="result-content">
-        <p>Select code on any webpage, then press Ctrl+C (Windows/Linux) or Cmd+C (Mac) to copy it.</p>
-        <p>Then, click the extension icon and choose an analysis option.</p>
+        <p>Open a webpage that contains code, then click the extension icon.</p>
+        <p>The extension extracts code directly from the page DOM and analyzes it.</p>
         <hr class="info-divider">
         <p class="supported-sites">Works seamlessly on platforms like <strong>LeetCode</strong>, <strong>GeeksforGeeks</b>(GFG), <strong>CodeChef</b>, <strong>Codeforces</strong>, etc.</p>
       </div>

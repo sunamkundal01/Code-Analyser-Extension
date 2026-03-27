@@ -54,6 +54,45 @@ html, body {
   min-height: 30px;
 }
 
+.api-key-editor {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.api-key-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  font-size: 0.9em;
+  display: none;
+}
+
+.api-key-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.api-key-actions .secondary-button {
+  flex: 1;
+}
+
+.api-key-editor-status {
+  min-height: 18px;
+  font-size: 0.85em;
+  color: var(--secondary-accent);
+}
+
+.api-key-editor-status.success {
+  color: var(--success-color);
+}
+
+.api-key-editor-status.error {
+  color: var(--danger-color);
+}
+
 #apiKeyMessage a {
   color: var(--primary-accent);
   text-decoration: none;
@@ -104,6 +143,64 @@ html, body {
   border-radius: var(--border-radius);
   box-shadow: var(--box-shadow);
   overflow: hidden; /* Important for child scrolling */
+}
+
+.extracted-code-container {
+  border-bottom: 1px solid var(--border-color);
+  background-color: #f8f9fa;
+}
+
+.extracted-code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: 0.9em;
+  font-weight: 600;
+  color: var(--secondary-accent);
+}
+
+.extracted-code-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.secondary-button {
+  border: 1px solid var(--border-color);
+  background-color: var(--secondary-bg);
+  color: var(--text-color);
+  border-radius: var(--border-radius);
+  padding: 5px 8px;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+
+.secondary-button:hover {
+  background-color: #eef1f4;
+}
+
+.secondary-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.extracted-code-preview {
+  max-height: 180px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  background-color: #1f2430;
+  color: #e6edf3;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  font-size: 0.82em;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.extracted-code-preview.is-collapsed {
+  display: none;
 }
 
 /* General styling for result content areas */

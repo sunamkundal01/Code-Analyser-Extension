@@ -1,9 +1,34 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const GEMINI_MODEL = 'gemini-2.5-flash';
+    const NON_CODE_PATTERNS = [
+        /it seems the code you intended to provide is missing/i,
+        /please provide the python code/i,
+        /general principles for complexity analysis/i,
+        /error from gemini api/i,
+        /to analyze the time complexity and space complexity/i
+    ];
+    const CODE_HINT_PATTERNS = [
+        /\b(function|def|class|return|if|else|elif|for|while|switch|case|try|catch|finally|const|let|var|public|private|static|void|async|await|import|from)\b/,
+        /[{}[\];]/,
+        /=>/,
+        /<\/?[a-z][^>]*>/i,
+        /^[ \t]*[#/]{1,2}.+/m
+    ];
     const getComplexityOnlyButton = document.getElementById('getComplexityOnly');
     const explainComplexityButton = document.getElementById('explainComplexity');
     const getCodeFeedbackButton = document.getElementById('getCodeFeedback');
+    const getExtraTestCasesButton = document.getElementById('getExtraTestCases');
+    const getAlternateApproachesButton = document.getElementById('getAlternateApproaches');
+    const getHintsButton = document.getElementById('getHints');
     const closeButton = document.getElementById('closeButton');
+    const refreshCodePreviewButton = document.getElementById('refreshCodePreview');
+    const toggleExtractedCodeButton = document.getElementById('toggleExtractedCode');
+    const toggleApiKeyEditorButton = document.getElementById('toggleApiKeyEditor');
+    const saveApiKeyInlineButton = document.getElementById('saveApiKeyInline');
     const apiKeyMessageDiv = document.getElementById('apiKeyMessage');
+    const apiKeyInput = document.getElementById('apiKeyInput');
+    const apiKeyEditorStatusEl = document.getElementById('apiKeyEditorStatus');
+    const extractedCodePreviewEl = document.getElementById('extractedCodePreview');
 
     const timeComplexityValueEl = document.getElementById('timeComplexityValue');
     const spaceComplexityValueEl = document.getElementById('spaceComplexityValue');
@@ -11,8 +36,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const resultsEl = document.getElementById('results'); // This is your general results/instruction area
 
     let geminiApiKey = null;
-    let currentSelectedCodeFromPage = ""; // Stores text from page selection
-    const MIN_CODE_LENGTH_FOR_SELECTION = 10; // Threshold to consider page selection too short
+    let currentCodeFromDom = "";
+    let currentProblemContext = "";
+    let isApiKeyEditorVisible = false;
+    let isExtractedCodeVisible = false;
+    const MIN_CODE_LENGTH = 10;
+    const MIN_CONTEXT_LENGTH = 40;
 
     function refreshUIStates() {
 
@@ -25,6 +54,10 @@ document.addEventListener('DOMContentLoaded', () => {
         getComplexityOnlyButton.disabled = !hasApiKey;
         explainComplexityButton.disabled = !hasApiKey;
         getCodeFeedbackButton.disabled = !hasApiKey;
+        getExtraTestCasesButton.disabled = !hasApiKey;
+        getAlternateApproachesButton.disabled = !hasApiKey;
+        getHintsButton.disabled = !hasApiKey;
+        apiKeyInput.value = geminiApiKey || "";
 
         if (!hasApiKey) {
             apiKeyMessageDiv.innerHTML = `API Key not set. Please <a href="#" id="optionsLink">set it in options</a>.`;
@@ -38,6 +71,12 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             apiKeyMessageDiv.textContent = 'API Key loaded. Ready to analyze.';
         }
+
+        apiKeyInput.style.display = isApiKeyEditorVisible ? 'block' : 'none';
+        saveApiKeyInlineButton.style.display = isApiKeyEditorVisible ? 'inline-block' : 'none';
+        toggleApiKeyEditorButton.textContent = isApiKeyEditorVisible ? 'Hide API Key Editor' : 'Edit API Key';
+        extractedCodePreviewEl.classList.toggle('is-collapsed', !isExtractedCodeVisible);
+        toggleExtractedCodeButton.textContent = isExtractedCodeVisible ? 'Hide Code' : 'Show Code';
     }
     
     // Initial message is set in HTML. Ensure the correct div is visible.
@@ -54,28 +93,30 @@ document.addEventListener('DOMContentLoaded', () => {
         refreshUIStates();
     });
 
-    chrome.runtime.sendMessage({ action: "getSelectedText" }, (response) => {
+    chrome.runtime.sendMessage({ action: "getExtractedCode" }, (response) => {
         if (chrome.runtime.lastError) {
-            console.error("[Popup] Error requesting selected text from page:", chrome.runtime.lastError.message);
-            currentSelectedCodeFromPage = "";
+            console.error("[Popup] Error requesting extracted code from page:", chrome.runtime.lastError.message);
+            currentCodeFromDom = "";
+            updateExtractedCodePreview("");
         } else if (response && typeof response.text !== 'undefined') {
-            console.log("[Popup] Received initial selected text from page (first 100 chars):", response.text.substring(0, 100));
-            currentSelectedCodeFromPage = response.text;
+            console.log("[Popup] Received extracted code from page DOM (first 100 chars):", response.text.substring(0, 100));
+            currentCodeFromDom = response.text;
+            currentProblemContext = response.problemContext || "";
+            updateExtractedCodePreview(currentCodeFromDom);
         } else {
-            console.error("[Popup] Invalid response when requesting selected text from page.");
-            currentSelectedCodeFromPage = "";
+            console.error("[Popup] Invalid response when requesting extracted code from page.");
+            currentCodeFromDom = "";
+            updateExtractedCodePreview("");
         }
-        // The initial instructional message from HTML will remain unless explicitly changed here.
-        // You could update a small part of it if code IS selected, but for now, let's keep HTML as master for initial view.
     });
 
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        if (message.action === "updateSelectedText") {
-            console.log("[Popup] Received updated selected text from page (first 100 chars):", message.text.substring(0, 100));
-            currentSelectedCodeFromPage = message.text;
-            // The HTML instructions will likely be overwritten if an analysis is triggered after this.
-            // If no analysis is triggered, the user still sees the instructions.
-            sendResponse({status: "Popup updated page-selected text"});
+        if (message.action === "updateExtractedCode") {
+            console.log("[Popup] Received updated extracted code from page (first 100 chars):", message.text.substring(0, 100));
+            currentCodeFromDom = message.text;
+            currentProblemContext = message.problemContext || currentProblemContext;
+            updateExtractedCodePreview(currentCodeFromDom);
+            sendResponse({status: "Popup updated page DOM code"});
             return true;
         }
     });
@@ -84,45 +125,188 @@ document.addEventListener('DOMContentLoaded', () => {
         window.close();
     });
 
-    async function getCodeForAnalysis() {
-        let codeToAnalyze = (currentSelectedCodeFromPage || "").trim();
-        let source = "page selection"; // For logging
+    toggleExtractedCodeButton.addEventListener('click', () => {
+        isExtractedCodeVisible = !isExtractedCodeVisible;
+        refreshUIStates();
+    });
 
-        if (codeToAnalyze.length < MIN_CODE_LENGTH_FOR_SELECTION) {
-            console.log(`[Popup] Page selection is short or empty (${codeToAnalyze.length} chars). Attempting to read from clipboard.`);
-            source = "clipboard"; // Tentatively
-            try {
-                const clipboardText = await navigator.clipboard.readText();
-                if (clipboardText && clipboardText.trim() !== "") {
-                    console.log("[Popup] Successfully read from clipboard (first 100 chars):", clipboardText.substring(0,100));
-                    codeToAnalyze = clipboardText.trim();
-                    // Update UI to indicate clipboard is being used for THIS analysis
-                    resultsEl.innerHTML = '<p>Using code from clipboard for this analysis...</p>';
-                    resultsEl.className = 'result-content'; // Reset class
-                    resultsEl.style.display = 'block';
-                    complexityDirectOutputEl.style.display = 'none';
-                } else {
-                    console.log("[Popup] Clipboard is empty or contains only whitespace. Using page selection (if any).");
-                    source = "page selection (after empty clipboard)";
-                }
-            } catch (err) {
-                console.error('[Popup] Failed to read clipboard contents:', err);
-                // Error message will be shown if analysis proceeds with no code.
-                // Update UI to indicate clipboard read error
-                resultsEl.innerHTML = `<p>Failed to read from clipboard. Using page selection if available. Error: ${err.message}</p>`;
-                resultsEl.className = 'result-content error';
-                resultsEl.style.display = 'block';
-                complexityDirectOutputEl.style.display = 'none';
-                source = "page selection (after clipboard error)";
-            }
+    toggleApiKeyEditorButton.addEventListener('click', () => {
+        isApiKeyEditorVisible = !isApiKeyEditorVisible;
+        apiKeyEditorStatusEl.textContent = '';
+        apiKeyEditorStatusEl.className = 'api-key-editor-status';
+        refreshUIStates();
+        if (isApiKeyEditorVisible) {
+            apiKeyInput.focus();
+            apiKeyInput.select();
+        }
+    });
+
+    saveApiKeyInlineButton.addEventListener('click', () => {
+        const nextApiKey = apiKeyInput.value.trim();
+        if (!nextApiKey) {
+            showApiKeyEditorStatus('Please enter an API key.', 'error');
+            return;
+        }
+
+        saveApiKeyInlineButton.disabled = true;
+        chrome.storage.local.set({ geminiApiKey: nextApiKey }, () => {
+            saveApiKeyInlineButton.disabled = false;
+            geminiApiKey = nextApiKey;
+            showApiKeyEditorStatus('API key updated.', 'success');
+            refreshUIStates();
+        });
+    });
+
+    refreshCodePreviewButton.addEventListener('click', async () => {
+        refreshCodePreviewButton.disabled = true;
+        refreshCodePreviewButton.textContent = 'Refreshing...';
+        await refreshCodeFromPageDom();
+        refreshCodePreviewButton.disabled = false;
+        refreshCodePreviewButton.textContent = 'Refresh Preview';
+    });
+
+    function updateExtractedCodePreview(code) {
+        if (code && code.trim()) {
+            extractedCodePreviewEl.textContent = code;
         } else {
-            console.log(`[Popup] Using code selected from page (${codeToAnalyze.length} chars).`);
+            extractedCodePreviewEl.textContent = 'No code extracted from the live page DOM yet.';
+        }
+    }
+
+    function showApiKeyEditorStatus(message, type) {
+        apiKeyEditorStatusEl.textContent = message;
+        apiKeyEditorStatusEl.className = `api-key-editor-status ${type || ''}`.trim();
+    }
+
+    function isLikelyCode(text) {
+        const trimmed = (text || "").trim();
+        if (!trimmed) {
+            return false;
+        }
+
+        if (NON_CODE_PATTERNS.some((pattern) => pattern.test(trimmed))) {
+            return false;
+        }
+
+        const lines = trimmed.split('\n').map((line) => line.trim()).filter(Boolean);
+        const hasCodeHint = CODE_HINT_PATTERNS.some((pattern) => pattern.test(trimmed));
+        const hasIndentedStructure = lines.some((line) => /^[ \t]{2,}\S+/.test(line));
+        const hasMultipleLines = lines.length >= 2;
+        const hasOperatorPattern = /(\+=|-=|\*=|\/=|==|!=|<=|>=|&&|\|\||:=|[=<>+\-*/%])/m.test(trimmed);
+        const hasCallPattern = /\b[a-zA-Z_][a-zA-Z0-9_]*\s*\([^)]*\)/m.test(trimmed);
+        const hasStatementEnding = lines.some((line) => /[;{}:]$/.test(line));
+
+        return hasCodeHint || (hasMultipleLines && hasIndentedStructure && (hasOperatorPattern || hasCallPattern || hasStatementEnding));
+    }
+
+    async function refreshCodeFromPageDom() {
+        return new Promise((resolve) => {
+            chrome.runtime.sendMessage({ action: "refreshExtractedCode" }, (response) => {
+                if (chrome.runtime.lastError) {
+                    console.error("[Popup] Error refreshing extracted code from page:", chrome.runtime.lastError.message);
+                    currentCodeFromDom = "";
+                    resolve("");
+                    return;
+                }
+
+                const refreshedCode = response && typeof response.text !== 'undefined' ? response.text : "";
+                currentCodeFromDom = refreshedCode;
+                currentProblemContext = response && typeof response.problemContext === 'string' ? response.problemContext : "";
+                console.log("[Popup] Refreshed extracted code from page DOM (first 100 chars):", refreshedCode.substring(0, 100));
+                updateExtractedCodePreview(refreshedCode);
+                resolve(refreshedCode);
+            });
+        });
+    }
+
+    async function getCodeForAnalysis() {
+        let codeToAnalyze = (await refreshCodeFromPageDom() || currentCodeFromDom || "").trim();
+        let source = "page DOM";
+
+        if (!isLikelyCode(codeToAnalyze) || codeToAnalyze.length < MIN_CODE_LENGTH) {
+            console.log(`[Popup] No valid code extracted from DOM (${codeToAnalyze.length} chars).`);
+            codeToAnalyze = "";
+            source = "no valid DOM code found";
+        } else {
+            console.log(`[Popup] Using code extracted from page DOM (${codeToAnalyze.length} chars).`);
         }
         console.log(`[Popup] Code For Analysis (Source: ${source}, Length: ${codeToAnalyze.length}):\n<<<<<<\n${codeToAnalyze.substring(0,500)}\n>>>>>>`); // Log more for debugging
         return codeToAnalyze;
     }
 
-    async function callGeminiApi(code, promptType) {
+    function getProblemContextForAnalysis() {
+        const context = (currentProblemContext || '').trim();
+        if (context.length >= MIN_CONTEXT_LENGTH) {
+            return context;
+        }
+        return '';
+    }
+
+    function buildPrompt(code, problemContext, promptType) {
+        const codeSection = code ? `Current Code:\n\n${code}` : 'Current Code:\n\nNo code was extracted.';
+        const contextSection = problemContext
+            ? `Problem Context:\n\n${problemContext}`
+            : 'Problem Context:\n\nNo structured problem statement was extracted from the page.';
+
+        switch (promptType) {
+            case 'complexityOnly':
+                return `Analyze the following code.
+Return ONLY the Time Complexity in Big O notation, then on a NEW LINE, return ONLY the Space Complexity in Big O notation.
+Also include the Recursion Stack Space Complexity if applicable (e.g., "Stack Space: O(...)").
+Do NOT include "Time Complexity:", "Space Complexity:", or any other text, labels, or markdown.
+Code:\n\n${code}`;
+            case 'explainComplexity':
+                return `Analyze and explain the Time Complexity and Space Complexity of the following code. Provide the Big O notation for both Time and Space. Then, give a step-by-step explanation for how you arrived at these complexities. Format the explanation clearly using Markdown.\nCode:\n\n${code}`;
+            case 'feedback':
+                return `Review the following code for quality. Suggest improvements regarding readability, efficiency, potential bugs, and best practices. Be specific and provide examples if possible. Format the response using Markdown.\nCode:\n\n${code}`;
+            case 'extraTestCases':
+                return `Using the problem context below, generate additional test cases for this coding problem.
+
+Requirements:
+- Use the same style as the platform question.
+- Prefer edge cases, boundary cases, tricky corner cases, and one or two normal sanity cases.
+- If the problem uses input/output formatting, preserve that exact formatting.
+- For each extra test case, provide a short one-line reason why it is useful.
+- Do not provide code.
+- Format the answer clearly in Markdown.
+
+${contextSection}
+
+${codeSection}`;
+            case 'alternateApproaches':
+                return `Using the problem context and current code below, provide alternate approaches from worst to better.
+
+Requirements:
+- Give only a concise overview of each approach.
+- Order them from brute force or weaker approach toward the better or optimal approach.
+- For each approach, mention the key idea and expected time/space complexity.
+- Do not provide a full implementation unless absolutely necessary.
+- Format the answer clearly in Markdown.
+
+${contextSection}
+
+${codeSection}`;
+            case 'hints':
+                return `Act like an interviewer helping a candidate who is stuck.
+
+Using the problem context and current code below, provide only hints that help the candidate move forward.
+
+Requirements:
+- Do not reveal the full solution.
+- Give progressive hints: start subtle, then get slightly more direct.
+- Focus on the key observation, useful decomposition, data structure choices, and edge cases.
+- If the current code suggests a likely mistake or missing idea, hint at it without rewriting the full answer.
+- Format the answer clearly in Markdown.
+
+${contextSection}
+
+${codeSection}`;
+            default:
+                return '';
+        }
+    }
+
+    async function callGeminiApi(code, problemContext, promptType) {
         if (!geminiApiKey) {
             resultsEl.innerHTML = 'Gemini API Key is not set. Please set it in the extension options.';
             resultsEl.className = 'result-content error';
@@ -131,16 +315,27 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        if (!code || code.trim() === "") {
-            // Display the original instructional message if no code is found after trying page & clipboard
+        const needsProblemContext = ['extraTestCases', 'alternateApproaches', 'hints'].includes(promptType);
+        if (needsProblemContext && !problemContext) {
             resultsEl.innerHTML = `
-                <p>Select the code on any webpage, then copy it (Ctrl+C for Windows/Linux or Cmd+C for Mac).</p>
-                <p>Next, click this extension's icon and choose the appropriate analysis option for your usage.</p>
+                <p>Problem context could not be extracted from the current page.</p>
+                <p>Open the problem page with the full statement, constraints, and examples visible, then click <strong>Refresh Preview</strong>.</p>
+            `;
+            resultsEl.className = 'result-content error';
+            resultsEl.style.display = 'block';
+            complexityDirectOutputEl.style.display = 'none';
+            return;
+        }
+
+        if (!code || code.trim() === "") {
+            resultsEl.innerHTML = `
+                <p>Open a webpage that contains code, then click this extension's icon.</p>
+                <p>The extension will extract code directly from the page DOM and analyze it.</p>
                 <br>
                 <p class="supported-sites-info">Works perfectly on platforms like LeetCode, GFG (GeeksforGeeks), CodeChef, Codeforces, etc.</p>
-                <p style="color: red; font-weight: bold; margin-top: 10px;">No code found from page selection or clipboard for analysis.</p>
+                <p style="color: red; font-weight: bold; margin-top: 10px;">No valid code block was found in the page DOM for analysis.</p>
             `;
-            resultsEl.className = 'result-content'; // Not necessarily an error state, but an info state
+            resultsEl.className = 'result-content';
             resultsEl.style.display = 'block';
             complexityDirectOutputEl.style.display = 'none';
             return;
@@ -154,29 +349,15 @@ document.addEventListener('DOMContentLoaded', () => {
         resultsEl.style.display = 'block';
         complexityDirectOutputEl.style.display = 'none';
 
-        let prompt;
-        switch (promptType) {
-            case 'complexityOnly':
-                prompt = `Analyze the following code.
-Return ONLY the Time Complexity in Big O notation, then on a NEW LINE, return ONLY the Space Complexity in Big O notation.
-Also include the Recursion Stack Space Complexity if applicable (e.g., "Stack Space: O(...)").
-Do NOT include "Time Complexity:", "Space Complexity:", or any other text, labels, or markdown.
-Code:\n\n${code}`;
-                break;
-            case 'explainComplexity':
-                prompt = `Analyze and explain the Time Complexity and Space Complexity of the following code. Provide the Big O notation for both Time and Space. Then, give a step-by-step explanation for how you arrived at these complexities. Format the explanation clearly using Markdown.\nCode:\n\n${code}`;
-                break;
-            case 'feedback':
-                prompt = `Review the following code for quality. Suggest improvements regarding readability, efficiency, potential bugs, and best practices. Be specific and provide examples if possible. Format the response using Markdown.\nCode:\n\n${code}`;
-                break;
-            default:
-                resultsEl.innerHTML = 'Invalid analysis type.';
-                resultsEl.className = 'result-content error';
-                resultsEl.style.display = 'block';
-                return;
+        const prompt = buildPrompt(code, problemContext, promptType);
+        if (!prompt) {
+            resultsEl.innerHTML = 'Invalid analysis type.';
+            resultsEl.className = 'result-content error';
+            resultsEl.style.display = 'block';
+            return;
         }
 
-        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiApiKey}`;
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=${geminiApiKey}`;
         try {
             const response = await fetch(API_URL, {
                 method: 'POST',
@@ -186,7 +367,7 @@ Code:\n\n${code}`;
 
             if (!response.ok) {
                 const errorData = await response.json();
-                resultsEl.innerHTML = `Error from Gemini API: ${errorData.error?.message || response.statusText}`;
+                resultsEl.innerHTML = `Error from Gemini API (${GEMINI_MODEL}): ${errorData.error?.message || response.statusText}`;
                 resultsEl.className = 'result-content error';
                 resultsEl.style.display = 'block';
                 return;
@@ -229,15 +410,27 @@ Code:\n\n${code}`;
 
     getComplexityOnlyButton.addEventListener('click', async () => {
         const code = await getCodeForAnalysis();
-        callGeminiApi(code, 'complexityOnly');
+        callGeminiApi(code, getProblemContextForAnalysis(), 'complexityOnly');
     });
     explainComplexityButton.addEventListener('click', async () => {
         const code = await getCodeForAnalysis();
-        callGeminiApi(code, 'explainComplexity');
+        callGeminiApi(code, getProblemContextForAnalysis(), 'explainComplexity');
     });
     getCodeFeedbackButton.addEventListener('click', async () => {
         const code = await getCodeForAnalysis();
-        callGeminiApi(code, 'feedback');
+        callGeminiApi(code, getProblemContextForAnalysis(), 'feedback');
+    });
+    getExtraTestCasesButton.addEventListener('click', async () => {
+        const code = await getCodeForAnalysis();
+        callGeminiApi(code, getProblemContextForAnalysis(), 'extraTestCases');
+    });
+    getAlternateApproachesButton.addEventListener('click', async () => {
+        const code = await getCodeForAnalysis();
+        callGeminiApi(code, getProblemContextForAnalysis(), 'alternateApproaches');
+    });
+    getHintsButton.addEventListener('click', async () => {
+        const code = await getCodeForAnalysis();
+        callGeminiApi(code, getProblemContextForAnalysis(), 'hints');
     });
 
     refreshUIStates(); 
