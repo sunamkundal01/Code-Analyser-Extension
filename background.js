@@ -1,9 +1,12 @@
 // background.js
-let popupWindowId = null; // Keep track of the popup window's ID
 let lastExtractedCode = "";
 let lastSourceTabId = null;
 let lastHtmlSnapshot = "";
 let lastProblemContext = "";
+
+// Open side panel when extension icon is clicked
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+  .catch((error) => console.error("[Background] Error setting side panel behavior:", error));
 
 async function getPageAnalysisData(preferredTabId = null) {
   try {
@@ -12,17 +15,20 @@ async function getPageAnalysisData(preferredTabId = null) {
     if (preferredTabId) {
       activeTab = await chrome.tabs.get(preferredTabId);
     } else {
-      const [currentWindow] = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
+      const currentWindow = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
       if (!currentWindow) {
         console.log("[Background] No normal window found to get code from.");
-        return "";
+        return { code: "", problemContext: "" };
       }
       [activeTab] = await chrome.tabs.query({ active: true, windowId: currentWindow.id });
     }
 
-    if (!activeTab || activeTab.url.startsWith('chrome://') || activeTab.url.startsWith('chrome-extension://') || activeTab.url.startsWith('https://chrome.google.com/webstore')) {
-      console.log("[Background] Active tab is not a webpage or no active tab found.");
-      return "";
+    console.log("[Background] activeTab:", activeTab?.id, "url:", activeTab?.url);
+
+    const tabUrl = activeTab?.url || '';
+    if (!activeTab || tabUrl.startsWith('chrome://') || tabUrl.startsWith('chrome-extension://') || tabUrl.startsWith('https://chrome.google.com/webstore')) {
+      console.log("[Background] Active tab is not a webpage or no active tab found. URL:", tabUrl);
+      return { code: "", problemContext: "" };
     }
     const injectionResults = await chrome.scripting.executeScript({
       target: { tabId: activeTab.id },
@@ -574,110 +580,123 @@ async function getPageAnalysisData(preferredTabId = null) {
 }
 
 
-chrome.action.onClicked.addListener(async (tab) => {
-  console.log("[Background] Action icon clicked on Tab ID:", tab.id, "URL:", tab.url);
-  lastSourceTabId = tab.id;
-  const pageData = await getPageAnalysisData(tab.id);
-  lastExtractedCode = pageData.code || "";
-  lastProblemContext = pageData.problemContext || "";
-  console.log("[Background] Extracted code from DOM (first 100 chars):", lastExtractedCode.substring(0, 100));
-
-  const windowWidth = 400;
-  const windowHeight = 650; // Or your preferred dimensions
-
-  // Get the window that the action icon was clicked IN to position the new popup.
-  chrome.windows.get(tab.windowId, {}, (clickedWindow) => {
-    let left, top;
-    if (chrome.runtime.lastError || !clickedWindow) {
-        console.warn("[Background] Failed to get details of the window where icon was clicked. Using default positioning.");
-        // Fallback positioning if needed, e.g., center screen or default.
-        // For simplicity, we might let Chrome decide if clickedWindow details are unavailable.
-    } else {
-        left = clickedWindow.left + Math.round((clickedWindow.width - windowWidth) / 2);
-        top = clickedWindow.top + Math.round((clickedWindow.height - windowHeight) / 2);
-    }
-
-    // Check if a popup window is already open
-    if (popupWindowId !== null) {
-      chrome.windows.get(popupWindowId, {}, (existingWindow) => {
-        if (chrome.runtime.lastError) {
-          // The previous popup window ID is invalid (likely closed by user)
-          console.log("[Background] Previous popup window not found. Creating a new one.");
-          popupWindowId = null; // Reset ID
-          createPopupWindow(left, top, windowWidth, windowHeight);
-        } else {
-          // Popup window exists. Close it.
-          console.log("[Background] Existing popup window found (ID:", popupWindowId, "). Closing it now.");
-          chrome.windows.remove(popupWindowId, () => {
-            if (chrome.runtime.lastError) {
-                console.error("[Background] Error removing previous popup:", chrome.runtime.lastError.message);
-            }
-            popupWindowId = null; // Reset ID
-            // OPTIONALLY: Re-open a new one. If you just want it to toggle close, stop here.
-            // To make it toggle open/close, you might need a state variable to decide if you should reopen.
-            // For the request "when i click on the extension again the prev open window get closed",
-            // simply closing is the direct answer. If you want it to then REOPEN, uncomment createPopupWindow.
-            // createPopupWindow(left, top, windowWidth, windowHeight);
-            console.log("[Background] Previous popup closed. A new one will not be opened automatically by this logic block.");
-          });
-        }
-      });
-    } else {
-      // No known popup window open, so create a new one
-      console.log("[Background] No known popup window. Creating a new one.");
-      createPopupWindow(left, top, windowWidth, windowHeight);
-    }
-  });
-});
-
-function createPopupWindow(left, top, width, height) {
-  chrome.windows.create({
-    url: chrome.runtime.getURL("popup.html"),
-    type: "popup",
-    width: width,
-    height: height,
-    left: left !== undefined ? Math.max(0, left) : undefined, // Ensure not off-screen
-    top: top !== undefined ? Math.max(0, top) : undefined,     // Ensure not off-screen
-    focused: true
-  }, (win) => {
-    if (win) {
-      popupWindowId = win.id; // Store the new window's ID
-      console.log("[Background] Popup window created with ID:", popupWindowId);
-    } else {
-      console.error("[Background] Failed to create popup window:", chrome.runtime.lastError?.message);
-      popupWindowId = null; // Ensure it's null if creation failed
-    }
+// Notify the side panel with fresh code
+function notifySidePanel() {
+  chrome.runtime.sendMessage({
+    action: "updateExtractedCode",
+    text: lastExtractedCode,
+    problemContext: lastProblemContext
+  }).catch(() => {
+    // Side panel may not be open — ignore
   });
 }
 
-// Listener for when ANY window is closed
-chrome.windows.onRemoved.addListener((windowId) => {
-  if (windowId === popupWindowId) {
-    console.log("[Background] Monitored popup window (ID:", windowId, ") was closed by user or other means.");
-    popupWindowId = null; // Reset our tracked ID
+// Extract code when the active tab changes or updates, so side panel always has fresh data
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  lastSourceTabId = activeInfo.tabId;
+  const pageData = await getPageAnalysisData(activeInfo.tabId);
+  lastExtractedCode = pageData.code || "";
+  lastProblemContext = pageData.problemContext || "";
+  console.log("[Background] Tab activated. Extracted code (first 100 chars):", lastExtractedCode.substring(0, 100));
+  notifySidePanel();
+});
+
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab.active) {
+    lastSourceTabId = tabId;
+    const pageData = await getPageAnalysisData(tabId);
+    lastExtractedCode = pageData.code || "";
+    lastProblemContext = pageData.problemContext || "";
+    console.log("[Background] Tab updated. Extracted code (first 100 chars):", lastExtractedCode.substring(0, 100));
+    notifySidePanel();
   }
 });
 
+// Live code polling — detect editor changes every 3 seconds and push to side panel
+let pollingInterval = null;
+
+function startCodePolling() {
+  if (pollingInterval) return;
+  pollingInterval = setInterval(async () => {
+    if (!lastSourceTabId) return;
+    try {
+      const tab = await chrome.tabs.get(lastSourceTabId);
+      if (!tab || !tab.active) return;
+      const tabUrl = tab.url || '';
+      if (tabUrl.startsWith('chrome://') || tabUrl.startsWith('chrome-extension://')) return;
+
+      const pageData = await getPageAnalysisData(lastSourceTabId);
+      const newCode = pageData.code || "";
+      if (newCode && newCode !== lastExtractedCode) {
+        lastExtractedCode = newCode;
+        lastProblemContext = pageData.problemContext || lastProblemContext;
+        console.log("[Background] Live poll: code changed (first 100 chars):", lastExtractedCode.substring(0, 100));
+        notifySidePanel();
+      }
+    } catch (e) {
+      // Tab may have been closed — ignore
+    }
+  }, 3000);
+}
+
+startCodePolling();
+
 // Message listener for popup to request selected text
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === "getExtractedCode") {
-    console.log("[Background] Popup requested extracted code. Sending (first 100 chars):", lastExtractedCode.substring(0,100));
-    sendResponse({ text: lastExtractedCode, problemContext: lastProblemContext });
-    return true; // Indicates you wish to send a response asynchronously
+  if (message.action === "getExtractedCode" || message.action === "refreshExtractedCode") {
+    (async () => {
+      try {
+        // Find the active tab in the last focused normal browser window
+        const windows = await chrome.windows.getAll({ windowTypes: ['normal'] });
+        let tab = null;
+
+        // Try last focused window first
+        const focusedWindow = windows.find(w => w.focused);
+        if (focusedWindow) {
+          const tabs = await chrome.tabs.query({ active: true, windowId: focusedWindow.id });
+          tab = tabs[0];
+        }
+
+        // Fallback: try any normal window
+        if (!tab) {
+          for (const win of windows) {
+            const tabs = await chrome.tabs.query({ active: true, windowId: win.id });
+            if (tabs[0]) {
+              tab = tabs[0];
+              break;
+            }
+          }
+        }
+
+        // Fallback: use lastSourceTabId if we have one
+        if (!tab && lastSourceTabId) {
+          try {
+            tab = await chrome.tabs.get(lastSourceTabId);
+          } catch (e) {
+            // tab might have been closed
+          }
+        }
+
+        if (tab) {
+          console.log("[Background] Found tab for extraction:", tab.id, "URL:", tab.url);
+          lastSourceTabId = tab.id;
+          const pageData = await getPageAnalysisData(tab.id);
+          lastExtractedCode = pageData.code || "";
+          lastProblemContext = pageData.problemContext || "";
+          console.log("[Background] Extracted code from tab", tab.id, "(first 100 chars):", lastExtractedCode.substring(0, 100));
+        } else {
+          console.log("[Background] No active tab found for code extraction.");
+        }
+      } catch (e) {
+        console.error("[Background] Error extracting code:", e);
+      }
+      sendResponse({ text: lastExtractedCode, problemContext: lastProblemContext });
+    })();
+    return true;
   }
   if (message.action === "getHtmlSnapshot") {
     sendResponse({ html: lastHtmlSnapshot });
     return true;
-  }
-  if (message.action === "refreshExtractedCode") {
-     (async () => {
-       const refreshedData = lastSourceTabId ? await getPageAnalysisData(lastSourceTabId) : { code: "", problemContext: "" };
-       lastExtractedCode = refreshedData.code || "";
-       lastProblemContext = refreshedData.problemContext || "";
-       console.log("[Background] Refreshed extracted code (first 100 chars):", lastExtractedCode.substring(0,100));
-       sendResponse({ text: lastExtractedCode, problemContext: lastProblemContext });
-     })();
-     return true;
   }
   if (message.action === "updateExtractedCode") {
      console.log("[Background] Received 'updateExtractedCode' from popup, new text:", message.text.substring(0,100));

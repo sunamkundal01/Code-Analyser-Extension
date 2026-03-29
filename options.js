@@ -13,9 +13,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // Save API key
   saveButton.addEventListener('click', () => {
     const apiKey = apiKeyInput.value.trim();
-    
+
     if (!apiKey) {
       showStatus('Please enter an API Key', 'error');
+      return;
+    }
+
+    if (!/^[A-Za-z0-9_-]{20,}$/.test(apiKey)) {
+      showStatus('Invalid API key format. Check your key and try again.', 'error');
       return;
     }
 

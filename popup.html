@@ -4,13 +4,15 @@
   <title>Code Analyzer</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <div class="container">
     <div id="header">
       <h1 id="title">Code Analyzer</h1>
-      <div id="apiKeyMessage">API status will load here...</div>
+      <div id="apiKeyMessage">Checking API key...</div>
       <div id="apiKeyEditor" class="api-key-editor">
         <input id="apiKeyInput" class="api-key-input" type="password" placeholder="Enter Gemini API Key" autocomplete="off">
         <div class="api-key-actions">
@@ -22,11 +24,11 @@
     </div>
 
     <div class="button-group">
-      <button id="getComplexityOnly" class="action-button" disabled>Get Time/Space Complexity (O notation)</button>
-      <button id="explainComplexity" class="action-button" disabled>Explain Time/Space Complexity</button>
-      <button id="getCodeFeedback" class="action-button" disabled>Get Code Quality Feedback</button>
-      <button id="getExtraTestCases" class="action-button" disabled>Generate Extra Test Cases</button>
-      <button id="getAlternateApproaches" class="action-button" disabled>Alternate Approaches</button>
+      <button id="getComplexityOnly" class="action-button" disabled>Get Complexity</button>
+      <button id="explainComplexity" class="action-button" disabled>Explain Complexity</button>
+      <button id="getCodeFeedback" class="action-button" disabled>Code Feedback</button>
+      <button id="getExtraTestCases" class="action-button" disabled>Extra Test Cases</button>
+      <button id="getAlternateApproaches" class="action-button" disabled>Alt. Approaches</button>
       <button id="getHints" class="action-button" disabled>Get Hints</button>
     </div>
 
@@ -50,21 +52,38 @@
           <span class="complexity-label">Space Complexity:</span>
           <span id="spaceComplexityValue" class="complexity-value space-value-color"></span>
         </div>
+        <div class="complexity-graphs">
+          <div class="complexity-graph-card">
+            <div class="graph-header">
+              <span class="graph-title">Time Complexity</span>
+              <span id="tcGraphLabel" class="graph-badge tc-badge"></span>
+            </div>
+            <canvas id="tcGraph" width="280" height="160"></canvas>
+          </div>
+          <div class="complexity-graph-card">
+            <div class="graph-header">
+              <span class="graph-title">Space Complexity</span>
+              <span id="scGraphLabel" class="graph-badge sc-badge"></span>
+            </div>
+            <canvas id="scGraph" width="280" height="160"></canvas>
+          </div>
+        </div>
       </div>
-      <!-- Updated initial message area -->
-      <div id="results" class="result-content">
-        <p>Open a webpage that contains code, then click the extension icon.</p>
-        <p>The extension extracts code directly from the page DOM and analyzes it.</p>
-        <hr class="info-divider">
-        <p class="supported-sites">Works seamlessly on platforms like <strong>LeetCode</strong>, <strong>GeeksforGeeks</b>(GFG), <strong>CodeChef</b>, <strong>Codeforces</strong>, etc.</p>
+      <div class="results-wrapper">
+        <button id="copyResults" class="copy-button" type="button" title="Copy results" style="display: none;">Copy</button>
+        <div id="results" class="result-content">
+          <p>Open a webpage that contains code, then click the extension icon.</p>
+          <p>The extension extracts code directly from the page DOM and analyzes it.</p>
+          <hr class="info-divider">
+          <p class="supported-sites">Works seamlessly on <strong>LeetCode</strong>, <strong>GeeksforGeeks</strong>, <strong>CodeChef</strong>, <strong>Codeforces</strong>, and more.</p>
+        </div>
       </div>
     </div>
 
     <footer id="attribution">
-      Made by Sunam
+      Made by <strong>Sunam</strong>
     </footer>
 
-    <button id="closeButton" class="close-button">Close</button>
   </div>
 
   <script src="marked.min.js"></script>

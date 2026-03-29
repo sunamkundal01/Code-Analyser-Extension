@@ -20,7 +20,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const getExtraTestCasesButton = document.getElementById('getExtraTestCases');
     const getAlternateApproachesButton = document.getElementById('getAlternateApproaches');
     const getHintsButton = document.getElementById('getHints');
-    const closeButton = document.getElementById('closeButton');
     const refreshCodePreviewButton = document.getElementById('refreshCodePreview');
     const toggleExtractedCodeButton = document.getElementById('toggleExtractedCode');
     const toggleApiKeyEditorButton = document.getElementById('toggleApiKeyEditor');
@@ -35,6 +34,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const complexityDirectOutputEl = document.getElementById('complexityDirectOutput');
     const resultsEl = document.getElementById('results'); // This is your general results/instruction area
 
+    const tcGraphCanvas = document.getElementById('tcGraph');
+    const scGraphCanvas = document.getElementById('scGraph');
+    const tcGraphLabel = document.getElementById('tcGraphLabel');
+    const scGraphLabel = document.getElementById('scGraphLabel');
+    const copyResultsButton = document.getElementById('copyResults');
+
     let geminiApiKey = null;
     let currentCodeFromDom = "";
     let currentProblemContext = "";
@@ -42,6 +47,205 @@ document.addEventListener('DOMContentLoaded', () => {
     let isExtractedCodeVisible = false;
     const MIN_CODE_LENGTH = 10;
     const MIN_CONTEXT_LENGTH = 40;
+
+    // ─── Complexity Graph Drawing ───
+    const COMPLEXITY_ORDER = [
+        { label: 'O(1)',       fn: () => 1 },
+        { label: 'O(log n)',   fn: (n) => Math.log2(Math.max(n, 1)) },
+        { label: 'O(n)',       fn: (n) => n },
+        { label: 'O(n log n)', fn: (n) => n * Math.log2(Math.max(n, 1)) },
+        { label: 'O(n²)',      fn: (n) => n * n },
+        { label: 'O(n³)',      fn: (n) => n * n * n },
+        { label: 'O(2ⁿ)',      fn: (n) => Math.pow(2, n) },
+        { label: 'O(n!)',      fn: (n) => { let r = 1; for (let i = 2; i <= n; i++) r *= i; return r; } },
+    ];
+
+    function parseComplexity(text) {
+        if (!text) return null;
+        const s = text.toLowerCase().replace(/\s+/g, '').replace(/\u00b2/g, '²').replace(/\u00b3/g, '³');
+        if (s.includes('o(1)') || s.includes('o(constant)')) return 'O(1)';
+        if (s.includes('o(logn)') || s.includes('o(log(n))')) return 'O(log n)';
+        if (s.includes('o(nlogn)') || s.includes('o(nlog(n))') || s.includes('o(n*logn)')) return 'O(n log n)';
+        if (s.includes('o(n³)') || s.includes('o(n^3)')) return 'O(n³)';
+        if (s.includes('o(n²)') || s.includes('o(n^2)')) return 'O(n²)';
+        if (s.includes('o(2^n)') || s.includes('o(2ⁿ)') || s.includes('o(2n)')) return 'O(2ⁿ)';
+        if (s.includes('o(n!)')) return 'O(n!)';
+        if (s.includes('o(n)')) return 'O(n)';
+        // Multi-variable products: O(n*m), O(t*n), etc. → linear in total input
+        if (/o\([a-z]\*[a-z]\)/.test(s)) return 'O(n)';
+        return null;
+    }
+
+    function drawComplexityGraph(canvas, highlightLabel, accentColor) {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        const W = rect.width || 280;
+        const H = rect.height || 160;
+        canvas.width = W * dpr;
+        canvas.height = H * dpr;
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+
+        const pad = { top: 12, right: 12, bottom: 28, left: 36 };
+        const gw = W - pad.left - pad.right;
+        const gh = H - pad.top - pad.bottom;
+
+        ctx.clearRect(0, 0, W, H);
+
+        const highlightIdx = COMPLEXITY_ORDER.findIndex(c => c.label === highlightLabel);
+
+        // Grid lines
+        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+            const y = pad.top + (gh / 4) * i;
+            ctx.beginPath();
+            ctx.moveTo(pad.left, y);
+            ctx.lineTo(pad.left + gw, y);
+            ctx.stroke();
+        }
+
+        const nMax = 12;
+        const nPoints = 50;
+
+        const capIdx = Math.min(highlightIdx + 2, COMPLEXITY_ORDER.length - 1);
+        const visibleComplexities = COMPLEXITY_ORDER.slice(0, Math.max(capIdx + 1, 4));
+
+        // Use log scale so smaller curves don't get crushed
+        let rawMax = 0;
+        visibleComplexities.forEach(c => {
+            const val = c.fn(nMax);
+            if (isFinite(val) && val > rawMax) rawMax = val;
+        });
+        if (rawMax === 0) rawMax = 1;
+        const logMax = Math.log(rawMax + 1);
+
+        function toY(val) {
+            if (!isFinite(val) || val < 0) val = rawMax;
+            val = Math.min(val, rawMax);
+            return pad.top + gh - (Math.log(val + 1) / logMax) * gh;
+        }
+
+        // Draw each curve
+        const labelPositions = [];
+        visibleComplexities.forEach((c) => {
+            const isHighlight = highlightIdx >= 0 && c.label === highlightLabel;
+            ctx.beginPath();
+            ctx.lineWidth = isHighlight ? 2.5 : 1.2;
+            ctx.strokeStyle = isHighlight ? accentColor : 'rgba(255,255,255,0.12)';
+
+            if (isHighlight) {
+                ctx.shadowColor = accentColor;
+                ctx.shadowBlur = 8;
+            } else {
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+            }
+
+            for (let i = 0; i <= nPoints; i++) {
+                const n = (i / nPoints) * nMax;
+                const val = c.fn(n);
+                const x = pad.left + (i / nPoints) * gw;
+                const y = toY(val);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Compute label Y, push away from previous labels
+            let ly = toY(c.fn(nMax)) - 3;
+            ly = Math.max(ly, pad.top + 8);
+            const minGap = 11;
+            for (const prev of labelPositions) {
+                if (Math.abs(ly - prev) < minGap) {
+                    ly = prev - minGap;
+                }
+            }
+            ly = Math.max(ly, pad.top + 4);
+            labelPositions.push(ly);
+
+            ctx.font = `${isHighlight ? '600' : '400'} ${isHighlight ? '9px' : '8px'} Inter, sans-serif`;
+            ctx.fillStyle = isHighlight ? accentColor : 'rgba(255,255,255,0.25)';
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(c.label, pad.left + gw - 2, ly);
+        });
+
+        // Fill area under highlighted curve
+        if (highlightIdx >= 0) {
+            const c = COMPLEXITY_ORDER[highlightIdx];
+            ctx.beginPath();
+            for (let i = 0; i <= nPoints; i++) {
+                const n = (i / nPoints) * nMax;
+                const x = pad.left + (i / nPoints) * gw;
+                const y = toY(c.fn(n));
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.lineTo(pad.left + gw, pad.top + gh);
+            ctx.lineTo(pad.left, pad.top + gh);
+            ctx.closePath();
+            const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + gh);
+            grad.addColorStop(0, accentColor.replace(')', ', 0.15)').replace('rgb', 'rgba'));
+            grad.addColorStop(1, accentColor.replace(')', ', 0.02)').replace('rgb', 'rgba'));
+            ctx.fillStyle = grad;
+            ctx.fill();
+        }
+
+        // Axes
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(pad.left, pad.top);
+        ctx.lineTo(pad.left, pad.top + gh);
+        ctx.lineTo(pad.left + gw, pad.top + gh);
+        ctx.stroke();
+
+        // Axis labels
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.font = '400 8px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText('Input Size (n)', pad.left + gw / 2, pad.top + gh + 14);
+
+        ctx.save();
+        ctx.translate(10, pad.top + gh / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('Operations', 0, 0);
+        ctx.restore();
+
+        const ratingColors = ['#34d399', '#34d399', '#60a5fa', '#fb923c', '#f87171', '#f87171', '#ef4444', '#ef4444'];
+        if (highlightIdx >= 0) {
+            const barY = pad.top + gh + 4;
+            const barH = 3;
+            const segW = gw / COMPLEXITY_ORDER.length;
+            COMPLEXITY_ORDER.forEach((_, i) => {
+                ctx.fillStyle = i === highlightIdx
+                    ? ratingColors[i]
+                    : 'rgba(255,255,255,0.06)';
+                const rx = pad.left + i * segW + 1;
+                ctx.fillRect(rx, barY, segW - 2, barH);
+            });
+        }
+    }
+
+    function renderComplexityGraphs(tcText, scText) {
+        try {
+            const tc = parseComplexity(tcText);
+            const sc = parseComplexity(scText);
+
+            tcGraphLabel.textContent = tc || tcText || '—';
+            scGraphLabel.textContent = sc || scText || '—';
+
+            drawComplexityGraph(tcGraphCanvas, tc, 'rgb(96, 165, 250)');
+            drawComplexityGraph(scGraphCanvas, sc, 'rgb(52, 211, 153)');
+        } catch (e) {
+            console.error("[Popup] Error rendering complexity graphs:", e);
+        }
+    }
 
     function refreshUIStates() {
 
@@ -110,7 +314,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         if (message.action === "updateExtractedCode") {
             console.log("[Popup] Received updated extracted code from page (first 100 chars):", message.text.substring(0, 100));
             currentCodeFromDom = message.text;
@@ -119,10 +323,6 @@ document.addEventListener('DOMContentLoaded', () => {
             sendResponse({status: "Popup updated page DOM code"});
             return true;
         }
-    });
-
-    closeButton.addEventListener('click', () => {
-        window.close();
     });
 
     toggleExtractedCodeButton.addEventListener('click', () => {
@@ -147,6 +347,10 @@ document.addEventListener('DOMContentLoaded', () => {
             showApiKeyEditorStatus('Please enter an API key.', 'error');
             return;
         }
+        if (!/^[A-Za-z0-9_-]{20,}$/.test(nextApiKey)) {
+            showApiKeyEditorStatus('Invalid API key format.', 'error');
+            return;
+        }
 
         saveApiKeyInlineButton.disabled = true;
         chrome.storage.local.set({ geminiApiKey: nextApiKey }, () => {
@@ -155,6 +359,22 @@ document.addEventListener('DOMContentLoaded', () => {
             showApiKeyEditorStatus('API key updated.', 'success');
             refreshUIStates();
         });
+    });
+
+    copyResultsButton.addEventListener('click', async () => {
+        const text = resultsEl.innerText || resultsEl.textContent || '';
+        if (!text.trim()) return;
+        try {
+            await navigator.clipboard.writeText(text);
+            copyResultsButton.textContent = 'Copied!';
+            copyResultsButton.classList.add('copied');
+            setTimeout(() => {
+                copyResultsButton.textContent = 'Copy';
+                copyResultsButton.classList.remove('copied');
+            }, 1500);
+        } catch (e) {
+            console.error("[Popup] Copy failed:", e);
+        }
     });
 
     refreshCodePreviewButton.addEventListener('click', async () => {
@@ -248,6 +468,15 @@ document.addEventListener('DOMContentLoaded', () => {
             ? `Problem Context:\n\n${problemContext}`
             : 'Problem Context:\n\nNo structured problem statement was extracted from the page.';
 
+        const FORMAT_RULES = `
+Formatting rules (STRICTLY follow):
+- Be concise. No filler text, no long paragraphs.
+- Use bullet points for every piece of information.
+- Use bold (**text**) for key terms and values.
+- Use inline code (\`code\`) for variable names, functions, and expressions.
+- Keep each bullet to 1-2 lines max.
+- Use Markdown headings (##, ###) to separate sections.`;
+
         switch (promptType) {
             case 'complexityOnly':
                 return `Analyze the following code.
@@ -256,51 +485,141 @@ Also include the Recursion Stack Space Complexity if applicable (e.g., "Stack Sp
 Do NOT include "Time Complexity:", "Space Complexity:", or any other text, labels, or markdown.
 Code:\n\n${code}`;
             case 'explainComplexity':
-                return `Analyze and explain the Time Complexity and Space Complexity of the following code. Provide the Big O notation for both Time and Space. Then, give a step-by-step explanation for how you arrived at these complexities. Format the explanation clearly using Markdown.\nCode:\n\n${code}`;
-            case 'feedback':
-                return `Review the following code for quality. Suggest improvements regarding readability, efficiency, potential bugs, and best practices. Be specific and provide examples if possible. Format the response using Markdown.\nCode:\n\n${code}`;
-            case 'extraTestCases':
-                return `Using the problem context below, generate additional test cases for this coding problem.
+                return `Analyze the Time and Space Complexity of this code.
+${FORMAT_RULES}
 
-Requirements:
-- Use the same style as the platform question.
-- Prefer edge cases, boundary cases, tricky corner cases, and one or two normal sanity cases.
-- If the problem uses input/output formatting, preserve that exact formatting.
-- For each extra test case, provide a short one-line reason why it is useful.
-- Do not provide code.
-- Format the answer clearly in Markdown.
+Structure your response as:
+## Complexity
+- **Time:** O(...) — one-line reason
+- **Space:** O(...) — one-line reason
+- **Stack Space:** O(...) (only if recursion is used)
+
+## Breakdown
+- Bullet each loop/recursion/data structure and its contribution to complexity.
+- No more than 5-6 bullets total.
+
+Code:\n\n${code}`;
+            case 'feedback':
+                return `Review this code for quality. Be direct and actionable.
+${FORMAT_RULES}
+
+Structure your response as:
+## Issues
+- Bullet each problem: what's wrong and a one-line fix.
+
+## Improvements
+- Bullet each suggestion: what to improve and why (efficiency, readability, best practice).
+
+Keep it to 4-6 bullets total. No generic advice. Only mention what applies to this specific code.
+
+Code:\n\n${code}`;
+            case 'extraTestCases':
+                return `Generate exactly 3 extra test cases for this problem at three difficulty levels: Easy, Medium, and Hard.
+
+CRITICAL — MATCH THE PROBLEM'S EXACT INPUT/OUTPUT FORMAT:
+1. First, carefully study the "Sample Input" and "Sample Output" sections from the problem statement below.
+2. Your generated test cases MUST follow the EXACT SAME format — same number of lines, same ordering of values (e.g., if the problem gives T, then N, then the array on separate lines, you must do the same).
+3. Do NOT invent your own format. Do NOT use variable names like "ARR = [...]" or "grid = [...]" — just raw values line by line, exactly as the problem's sample input/output shows.
+4. Include ALL required fields (like T, N, array values, etc.) — do not skip any.
+
+You MUST format each test case EXACTLY like this Markdown template:
+
+---
+
+### Test Case 1 — 🟢 Easy — *(short reason)*
+
+**Input:**
+\`\`\`
+(raw input here, matching the problem's Sample Input format exactly)
+\`\`\`
+
+**Output:**
+\`\`\`
+(raw output here, matching the problem's Sample Output format exactly)
+\`\`\`
+
+**Explanation:**
+- Brief step-by-step (2-3 bullets max)
+
+---
+
+### Test Case 2 — 🟡 Medium — *(short reason)*
+
+(same structure)
+
+---
+
+### Test Case 3 — 🔴 Hard — *(short reason)*
+
+(same structure)
+
+---
+
+Rules:
+- Exactly 3 test cases. No more, no less.
+- Easy: simple/small input, base case, or minimal valid input.
+- Medium: moderate size, includes edge cases like duplicates, negatives, or mixed values.
+- Hard: larger input, worst-case performance, boundary limits, or tricky corner cases.
+- The input/output format must be IDENTICAL to the problem's own sample input/output — copy the structure line-for-line.
+- Keep explanations short: 2-3 bullet points max per test case.
+- No code solutions. No extra commentary outside the template.
+- Separate each test case with a horizontal rule (---).
 
 ${contextSection}
 
 ${codeSection}`;
             case 'alternateApproaches':
-                return `Using the problem context and current code below, provide alternate approaches from worst to better.
+                return `List alternate approaches for this problem, ordered from brute force to optimal.
+${FORMAT_RULES}
+
+Structure each approach as:
+### Approach N: Name
+- **Idea:** one-line key insight
+- **Time:** O(...) | **Space:** O(...)
+- **Trade-off:** one-line pro/con (optional, only if notable)
 
 Requirements:
-- Give only a concise overview of each approach.
-- Order them from brute force or weaker approach toward the better or optimal approach.
-- For each approach, mention the key idea and expected time/space complexity.
-- Do not provide a full implementation unless absolutely necessary.
-- Format the answer clearly in Markdown.
+- 3-4 approaches max.
+- No full implementations. Pseudocode only if absolutely necessary (max 3 lines).
+- Highlight which approach the current code uses.
 
 ${contextSection}
 
 ${codeSection}`;
             case 'hints':
-                return `Act like an interviewer helping a candidate who is stuck.
-
-Using the problem context and current code below, provide only hints that help the candidate move forward.
-
-Requirements:
-- Do not reveal the full solution.
-- Give progressive hints: start subtle, then get slightly more direct.
-- Focus on the key observation, useful decomposition, data structure choices, and edge cases.
-- If the current code suggests a likely mistake or missing idea, hint at it without rewriting the full answer.
-- Format the answer clearly in Markdown.
+                return `You are a strict technical interviewer. Your job is to evaluate the candidate's code and either congratulate them or give hints — never give the solution.
 
 ${contextSection}
 
-${codeSection}`;
+${codeSection}
+
+Instructions:
+1. First, silently evaluate: does the current code correctly and completely solve the problem?
+   - Consider correctness, edge cases, and whether it would pass all test cases.
+
+2. If the code is CORRECT and complete:
+   - Respond ONLY with a short congratulatory message like: "✅ Your code looks correct! Great job solving this problem."
+   - Do NOT add hints, suggestions, or improvements.
+
+3. If the code is INCORRECT, INCOMPLETE, or the candidate is clearly stuck:
+   - Give ONLY bullet-point hints like a real interviewer would.
+   - NEVER write or suggest actual code.
+   - NEVER reveal the full solution or algorithm directly.
+   - Structure hints from subtle to more direct:
+
+### Hint 1
+- (A subtle nudge — point toward the key observation or what they might be missing conceptually)
+
+### Hint 2
+- (More direct — hint at the right data structure, technique, or approach to use)
+
+### Hint 3
+- (Almost there — hint at the specific step or fix needed, without writing the code)
+
+Rules:
+- Hints in bullet points only. No paragraphs.
+- Max 1 bullet per hint.
+- Never write code. Never give the answer outright.`;
             default:
                 return '';
         }
@@ -344,10 +663,11 @@ ${codeSection}`;
         // Prepare UI for loading
         timeComplexityValueEl.textContent = '';
         spaceComplexityValueEl.textContent = '';
-        resultsEl.innerHTML = 'Analyzing...'; 
+        resultsEl.innerHTML = 'Analyzing...';
         resultsEl.className = 'result-content loading';
         resultsEl.style.display = 'block';
         complexityDirectOutputEl.style.display = 'none';
+        copyResultsButton.style.display = 'none';
 
         const prompt = buildPrompt(code, problemContext, promptType);
         if (!prompt) {
@@ -357,17 +677,28 @@ ${codeSection}`;
             return;
         }
 
-        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=${geminiApiKey}`;
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
         try {
             const response = await fetch(API_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': geminiApiKey
+                },
                 body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+                signal: controller.signal,
             });
+            clearTimeout(timeout);
 
             if (!response.ok) {
-                const errorData = await response.json();
-                resultsEl.innerHTML = `Error from Gemini API (${GEMINI_MODEL}): ${errorData.error?.message || response.statusText}`;
+                const errorData = await response.json().catch(() => ({}));
+                if (response.status === 429) {
+                    resultsEl.innerHTML = 'API rate limit exceeded. Please wait a minute and try again.';
+                } else {
+                    resultsEl.innerHTML = `Error from Gemini API (${GEMINI_MODEL}): ${errorData.error?.message || response.statusText}`;
+                }
                 resultsEl.className = 'result-content error';
                 resultsEl.style.display = 'block';
                 return;
@@ -380,17 +711,21 @@ ${codeSection}`;
                 let rawText = data.candidates[0].content.parts[0].text.trim();
                 if (promptType === 'complexityOnly') {
                     const lines = rawText.split('\n');
-                    timeComplexityValueEl.textContent = lines[0] ? lines[0].trim() : "N/A";
-                    spaceComplexityValueEl.textContent = lines[1] ? lines[1].trim() : "N/A";
-                    if (lines.length > 2) { // If a third line exists (e.g. for stack space)
-                       spaceComplexityValueEl.textContent += ` (${lines[2].trim()})`;
+                    const tcVal = lines[0] ? lines[0].trim() : "N/A";
+                    let scVal = lines[1] ? lines[1].trim() : "N/A";
+                    if (lines.length > 2) {
+                       scVal += ` (${lines[2].trim()})`;
                     }
+                    timeComplexityValueEl.textContent = tcVal;
+                    spaceComplexityValueEl.textContent = scVal;
                     complexityDirectOutputEl.style.display = 'block';
-                    resultsEl.style.display = 'none'; 
+                    resultsEl.style.display = 'none';
+                    renderComplexityGraphs(tcVal, scVal);
                 } else {
                     resultsEl.innerHTML = marked.parse(rawText);
                     resultsEl.style.display = 'block';
                     complexityDirectOutputEl.style.display = 'none';
+                    copyResultsButton.style.display = 'block';
                 }
             } else if (data.promptFeedback && data.promptFeedback.blockReason) {
                 resultsEl.innerHTML = `Blocked by API: ${data.promptFeedback.blockReason.reason || 'Unknown'}. ${data.promptFeedback.blockReason.message || ''}`;
@@ -402,7 +737,12 @@ ${codeSection}`;
                 resultsEl.style.display = 'block';
             }
         } catch (error) {
-            resultsEl.innerHTML = `Failed to connect to Gemini API: ${error.message}`;
+            clearTimeout(timeout);
+            if (error.name === 'AbortError') {
+                resultsEl.innerHTML = 'Request timed out after 30 seconds. Check your connection and try again.';
+            } else {
+                resultsEl.innerHTML = `Failed to connect to Gemini API: ${error.message}`;
+            }
             resultsEl.className = 'result-content error';
             resultsEl.style.display = 'block';
         }

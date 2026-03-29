@@ -1,16 +1,29 @@
-/* popup.css */
+/* popup.css — Modern UI */
 :root {
-  --primary-bg: #f4f7f6;
-  --secondary-bg: #ffffff;
-  --text-color: #333333;
-  --primary-accent: #007bff;
-  --secondary-accent: #6c757d;
-  --success-color: #28a745; /* Green, e.g., for space complexity */
-  --danger-color: #dc3545;
-  --border-color: #dee2e6;
-  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --border-radius: 4px;
-  --box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface-hover: #222633;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-focus: rgba(99, 102, 241, 0.5);
+  --text: #e2e8f0;
+  --text-muted: #8892a4;
+  --text-dim: #5a6478;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --accent-glow: rgba(99, 102, 241, 0.15);
+  --green: #34d399;
+  --green-dim: rgba(52, 211, 153, 0.12);
+  --red: #f87171;
+  --red-dim: rgba(248, 113, 113, 0.12);
+  --orange: #fb923c;
+  --blue: #60a5fa;
+  --blue-dim: rgba(96, 165, 250, 0.12);
+  --radius: 10px;
+  --radius-lg: 14px;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+  --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.15);
+  --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 * {
@@ -21,39 +34,76 @@
 
 html, body {
   height: 100%;
-  font-family: var(--font-family);
-  color: var(--text-color);
-  background-color: var(--primary-bg);
-  font-size: 14px;
+  width: 100%;
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--bg);
+  font-size: 13.5px;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.1);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* ─── Layout ─── */
 .container {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  padding: 15px;
-  gap: 15px;
+  height: 100vh;
+  padding: 16px;
+  gap: 14px;
+  overflow-y: auto;
 }
 
+/* ─── Header ─── */
 #header {
   text-align: center;
+  padding-bottom: 2px;
 }
 
 #title {
-  font-size: 1.4em;
-  color: var(--primary-accent);
-  margin-bottom: 8px;
+  font-size: 1.35em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, #818cf8, #6366f1, #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 10px;
 }
 
 #apiKeyMessage {
-  font-size: 0.9em;
-  color: var(--secondary-accent);
-  padding: 8px;
-  background-color: #e9ecef;
-  border-radius: var(--border-radius);
+  font-size: 0.82em;
+  color: var(--text-muted);
+  padding: 8px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
+#apiKeyMessage a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+#apiKeyMessage a:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+/* ─── API Key Editor ─── */
 .api-key-editor {
   margin-top: 10px;
   display: flex;
@@ -63,11 +113,20 @@ html, body {
 
 .api-key-input {
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
-  font-size: 0.9em;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.88em;
+  font-family: var(--mono);
   display: none;
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+  transition: border var(--transition);
+}
+.api-key-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
 .api-key-actions {
@@ -80,74 +139,102 @@ html, body {
 }
 
 .api-key-editor-status {
-  min-height: 18px;
-  font-size: 0.85em;
-  color: var(--secondary-accent);
+  min-height: 16px;
+  font-size: 0.8em;
+  color: var(--text-muted);
 }
+.api-key-editor-status.success { color: var(--green); }
+.api-key-editor-status.error { color: var(--red); }
 
-.api-key-editor-status.success {
-  color: var(--success-color);
-}
-
-.api-key-editor-status.error {
-  color: var(--danger-color);
-}
-
-#apiKeyMessage a {
-  color: var(--primary-accent);
-  text-decoration: none;
-}
-#apiKeyMessage a:hover {
-  text-decoration: underline;
-}
-
+/* ─── Button Group ─── */
 .button-group {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
 .action-button {
-  background-color: var(--primary-accent);
-  color: white;
-  border: none;
-  padding: 12px 15px;
+  position: relative;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 11px 10px;
   text-align: center;
-  font-size: 0.95em;
+  font-size: 0.82em;
+  font-weight: 500;
   cursor: pointer;
-  border-radius: var(--border-radius);
-  transition: background-color 0.2s ease, transform 0.1s ease;
+  border-radius: var(--radius);
+  transition: all var(--transition);
   width: 100%;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
 }
 
 .action-button:hover {
-  background-color: #0056b3;
+  background: var(--surface-hover);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 0 3px var(--accent-glow);
+  transform: translateY(-1px);
 }
 
 .action-button:active {
-  transform: scale(0.98);
+  transform: translateY(0) scale(0.98);
 }
 
 .action-button:disabled {
-  background-color: #c0c0c0;
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text-dim);
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+/* Span full width for odd last button */
+.button-group .action-button:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+/* ─── Secondary Button ─── */
+.secondary-button {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: 7px;
+  padding: 5px 10px;
+  font-size: 0.78em;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.secondary-button:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  border-color: rgba(255,255,255,0.15);
+}
+.secondary-button:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
+/* ─── Results Container ─── */
 #resultsContainer {
   flex-grow: 1;
-  display: flex; /* Using flex to manage child visibility */
-  flex-direction: column; /* Stack children vertically */
-  min-height: 150px;
-  background-color: var(--secondary-bg);
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
-  box-shadow: var(--box-shadow);
-  overflow: hidden; /* Important for child scrolling */
+  display: flex;
+  flex-direction: column;
+  min-height: 140px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  overflow: hidden;
 }
 
+/* ─── Extracted Code ─── */
 .extracted-code-container {
-  border-bottom: 1px solid var(--border-color);
-  background-color: #f8f9fa;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
 }
 
 .extracted-code-header {
@@ -155,217 +242,283 @@ html, body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 12px;
-  font-size: 0.9em;
+  padding: 10px 14px;
+  font-size: 0.82em;
   font-weight: 600;
-  color: var(--secondary-accent);
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .extracted-code-actions {
   display: flex;
-  gap: 8px;
-}
-
-.secondary-button {
-  border: 1px solid var(--border-color);
-  background-color: var(--secondary-bg);
-  color: var(--text-color);
-  border-radius: var(--border-radius);
-  padding: 5px 8px;
-  font-size: 0.85em;
-  cursor: pointer;
-}
-
-.secondary-button:hover {
-  background-color: #eef1f4;
-}
-
-.secondary-button:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
+  gap: 6px;
 }
 
 .extracted-code-preview {
   max-height: 180px;
   overflow: auto;
   margin: 0;
-  padding: 12px;
-  background-color: #1f2430;
-  color: #e6edf3;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
-  font-size: 0.82em;
-  line-height: 1.5;
+  padding: 14px;
+  background: var(--bg);
+  color: #c9d1d9;
+  font-family: var(--mono);
+  font-size: 0.78em;
+  line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+  border-top: 1px solid var(--border);
 }
 
 .extracted-code-preview.is-collapsed {
   display: none;
 }
 
-/* General styling for result content areas */
+/* ─── Results Content ─── */
 .result-content {
-  padding: 15px;
+  padding: 16px;
   width: 100%;
-  overflow-y: auto; /* Enable scrolling if content overflows */
-  line-height: 1.6;
-  font-size: 1em; /* Base font size for results */
+  overflow-y: auto;
+  line-height: 1.7;
+  font-size: 0.92em;
   word-wrap: break-word;
+  color: var(--text-muted);
 }
 
-/* Styles for the specific Time/Space Complexity output block */
-/* #complexityDirectOutput { */
-  /* display: none; is set inline in HTML, JS will toggle it */
-/* } */
+/* ─── Complexity Display ─── */
+.complexity-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+}
+.complexity-item:last-child { margin-bottom: 0; }
 
-.complexity-item { /* Each "Time Complexity: O(n)" line */
-  margin-bottom: 0.8em;
+.complexity-item:first-child {
+  background: var(--blue-dim);
 }
 .complexity-item:last-child {
-  margin-bottom: 0;
+  background: var(--green-dim);
 }
 
 .complexity-label {
-  color: var(--text-color);
-  font-size: 1.1em; /* Label size */
-  margin-right: 8px; /* Space between label and value */
+  color: var(--text-muted);
+  font-size: 0.9em;
+  font-weight: 500;
 }
 
 .complexity-value {
-  font-weight: bold;
-  font-size: 1.3em; /* Value size (O-notation) */
+  font-weight: 700;
+  font-size: 1.2em;
+  font-family: var(--mono);
 }
 
-.time-value-color {
-  color: var(--primary-accent); /* Blue for Time Complexity value */
+.time-value-color { color: var(--blue); }
+.space-value-color { color: var(--green); }
+
+/* ─── Complexity Graphs ─── */
+.complexity-graphs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
 }
 
-.space-value-color {
-  color: var(--success-color); /* Green for Space Complexity value */
+.complexity-graph-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  overflow: hidden;
 }
 
-/* Styles for the general #results (Markdown output) */
+.graph-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.graph-title {
+  font-size: 0.78em;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.graph-badge {
+  font-size: 0.72em;
+  font-weight: 700;
+  font-family: var(--mono);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.tc-badge {
+  background: var(--blue-dim);
+  color: var(--blue);
+}
+
+.sc-badge {
+  background: var(--green-dim);
+  color: var(--green);
+}
+
+.complexity-graph-card canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 6px;
+}
+
+/* ─── Copy Button ─── */
+.results-wrapper {
+  position: relative;
+}
+
+.copy-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.72em;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.copy-button:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  border-color: rgba(255,255,255,0.15);
+}
+.copy-button.copied {
+  background: var(--green-dim);
+  color: var(--green);
+  border-color: var(--green);
+}
+
+/* ─── Markdown Results ─── */
 #results h1, #results h2, #results h3, #results h4 {
-  color: var(--primary-accent);
-  margin-top: 1em;
+  color: var(--text);
+  margin-top: 1.2em;
   margin-bottom: 0.5em;
   line-height: 1.3;
+  font-weight: 600;
 }
-#results h1 { font-size: 1.5em; }
-#results h2 { font-size: 1.3em; }
-#results h3 { font-size: 1.1em; }
+#results h1 { font-size: 1.4em; }
+#results h2 { font-size: 1.2em; }
+#results h3 { font-size: 1.05em; color: var(--accent-hover); }
 
-#results p { margin-bottom: 0.8em; }
-#results ul, #results ol { margin-left: 20px; margin-bottom: 0.8em; }
-#results li { margin-bottom: 0.3em; }
+#results p { margin-bottom: 0.75em; color: var(--text-muted); }
+#results ul, #results ol { margin-left: 18px; margin-bottom: 0.75em; }
+#results li { margin-bottom: 0.3em; color: var(--text-muted); }
+
+#results strong { color: var(--text); font-weight: 600; }
 
 #results pre {
-  background-color: #2d2d2d;
-  color: #f0f0f0;
-  padding: 12px;
-  border-radius: var(--border-radius);
+  background: var(--bg);
+  color: #c9d1d9;
+  padding: 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
   overflow-x: auto;
   margin-bottom: 1em;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
-  font-size: 0.85em;
+  font-family: var(--mono);
+  font-size: 0.82em;
+  line-height: 1.6;
 }
 
 #results code {
-  background-color: #e9ecef;
-  color: #c7254e;
-  padding: 2px 4px;
-  border-radius: var(--border-radius);
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--accent-hover);
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-family: var(--mono);
+  font-size: 0.88em;
 }
 
 #results pre code {
-  background-color: transparent;
+  background: transparent;
   color: inherit;
   padding: 0;
   border-radius: 0;
 }
 
 #results table { width: 100%; border-collapse: collapse; margin-bottom: 1em; }
-#results th, #results td { border: 1px solid var(--border-color); padding: 8px; text-align: left; }
-#results th { background-color: #e9ecef; }
-
-.close-button {
-  background-color: var(--danger-color);
-  color: white;
-  border: none;
-  padding: 12px 15px;
-  text-align: center;
-  font-size: 1em;
-  cursor: pointer;
-  border-radius: var(--border-radius);
-  transition: background-color 0.2s ease;
-  width: 100%;
-  margin-top: auto;
+#results th, #results td {
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 0.9em;
 }
-
-.close-button:hover {
-  background-color: #c82333;
+#results th {
+  background: rgba(255,255,255,0.04);
+  color: var(--text);
+  font-weight: 600;
 }
+#results td { color: var(--text-muted); }
 
-/* Status specific styling for result content (can be applied via JS) */
+/* ─── Status States ─── */
 .result-content.error {
-  color: var(--danger-color);
-  font-weight: bold;
+  color: var(--red);
+  font-weight: 500;
+  background: var(--red-dim);
+  border-radius: var(--radius);
 }
+
 .result-content.loading {
-  color: var(--primary-accent);
+  color: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
   font-style: italic;
+  gap: 8px;
 }
 
-
-
-/* popup.css */
-/* ... (Keep all your existing CSS) ... */
-
-/* Styles for the instructional text in #results */
-#results p {
-  margin-bottom: 0.8em; /* Keep or adjust existing p styling if you have it */
+.result-content.loading::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--accent-glow);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
 }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Info / Instruction Text ─── */
 .info-divider {
   border: none;
-  border-top: 1px solid var(--border-color);
-  margin: 12px 0; /* Adjust spacing */
+  border-top: 1px solid var(--border);
+  margin: 12px 0;
 }
 
 .supported-sites {
-  font-size: 0.9em;
-  color: var(--secondary-accent);
-  font-style: arial, sans-serif; /* Use a sans-serif font for clarity */
+  font-size: 0.85em;
+  color: var(--text-dim);
 }
 
-
-
-/* Styling for the attribution footer */
+/* ─── Footer ─── */
 #attribution {
   text-align: center;
-  font-size: 0.85em;
-  font-family: Arial, sans-serif; /* Use a sans-serif font for clarity */
-  color: var(--secondary-accent);
-  padding: 8px 0; /* Add some padding */
-  /* margin-top: auto; /* This might have been on the close button.
-                         The footer will now be just above the close button. */
+  font-size: 0.78em;
+  color: var(--text-dim);
+  padding: 4px 0 2px;
+  letter-spacing: 0.03em;
 }
 
-
-
-/* If you want the "Close" button to always be at the very bottom and the footer
-   to be just above it, ensure your .container is display:flex and flex-direction:column,
-   and the .close-button has margin-top: auto;
-   The footer will then be a normal flow item before the auto-margined close button.
-*/
-.container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  padding: 15px;
-  gap: 15px; /* Adjust gap if footer makes things too tight */
+#attribution strong {
+  color: var(--text-muted);
+  font-weight: 600;
 }
