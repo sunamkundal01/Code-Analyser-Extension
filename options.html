@@ -2,131 +2,296 @@
 <html>
 <head>
   <title>Code Analyzer Settings</title>
+  <meta charset="UTF-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      padding: 20px;
-      min-width: 450px; /* Adjusted for two buttons */
-      background-color: #f8f9fa;
-      color: #202124;
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface-hover: #222633;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-focus: rgba(99, 102, 241, 0.5);
+      --text: #e2e8f0;
+      --text-muted: #8892a4;
+      --text-dim: #5a6478;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --accent-glow: rgba(99, 102, 241, 0.15);
+      --green: #34d399;
+      --red: #f87171;
+      --radius: 10px;
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+      --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      padding: 32px 20px;
+      min-width: 450px;
+      -webkit-font-smoothing: antialiased;
+    }
+
     .container {
-      max-width: 600px;
+      max-width: 520px;
       margin: 0 auto;
     }
 
     h1 {
-      color: #202124;
       font-size: 1.5em;
-      margin-bottom: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #818cf8, #6366f1, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
       text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .settings-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .settings-card h2 {
+      font-size: 0.82em;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 14px;
     }
 
     label {
       display: block;
       margin-bottom: 8px;
-      color: #5f6368;
+      color: var(--text-muted);
       font-weight: 500;
+      font-size: 0.9em;
     }
 
-    input[type="text"] {
+    input[type="password"], select {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 0.9em;
+      font-family: var(--mono);
+      background: var(--bg);
+      color: var(--text);
+      outline: none;
+      transition: border var(--transition);
+      margin-bottom: 14px;
+    }
+
+    input[type="password"]:focus, select:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    select {
+      font-family: var(--font);
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238892a4' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+    }
+
+    .model-hint {
+      font-size: 0.78em;
+      color: var(--text-dim);
+      margin-top: -8px;
+      margin-bottom: 14px;
+      line-height: 1.5;
+    }
+
+    .save-button {
       width: 100%;
       padding: 12px;
-      margin-bottom: 15px;
-      border: 1px solid #dadce0;
-      border-radius: 4px;
-      font-size: 14px;
-      box-sizing: border-box;
-    }
-
-    #saveKey { /* ID for the save button specifically */
-      background-color: #1a73e8; /* Primary action blue */
-      color: white;
-      padding: 12px 24px;
+      background: var(--accent);
+      color: #fff;
       border: none;
-      border-radius: 4px;
+      border-radius: var(--radius);
+      font-size: 0.9em;
+      font-weight: 600;
+      font-family: var(--font);
       cursor: pointer;
-      font-size: 14px;
-      width: 100%;
-      transition: background-color 0.2s;
-      margin-bottom: 15px; /* Space before status */
+      transition: all var(--transition);
     }
 
-    #saveKey:hover {
-      background-color: #1557b0;
+    .save-button:hover {
+      background: var(--accent-hover);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .save-button:active {
+      transform: scale(0.98);
     }
 
     #status {
-      margin-top: 15px;
-      color: #34a853; /* Green for success */
+      margin-top: 12px;
+      font-size: 0.85em;
       text-align: center;
       min-height: 20px;
-      margin-bottom: 25px; /* Space before help links */
-    }
-    #status.error { /* Class for error messages */
-        color: #dc3545; /* Red for errors */
+      transition: color var(--transition);
     }
 
+    #status.success { color: var(--green); }
+    #status.error { color: var(--red); }
 
-    .help-links-container {
-      text-align: center; /* Center the buttons within this container */
-      margin-top: 25px;
-      border-top: 1px solid #e0e0e0; /* Optional separator */
-      padding-top: 20px; /* Space above help links */
+    .help-section {
+      text-align: center;
+      padding-top: 4px;
     }
 
-    .help-links-container p {
-        margin-bottom: 15px;
-        font-size: 0.95em;
-        color: #5f6368;
+    .help-section p {
+      font-size: 0.85em;
+      color: var(--text-dim);
+      margin-bottom: 14px;
     }
 
-    .button-link {
-      display: inline-block; /* To allow padding and margins */
-      padding: 10px 18px;
-      margin: 5px;
-      border-radius: 4px;
-      color: white !important; /* Ensure text is white */
+    .help-links {
+      display: flex;
+      gap: 10px;
+    }
+
+    .help-link {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 10px 14px;
+      border-radius: var(--radius);
+      color: #fff;
       text-decoration: none;
-      font-size: 0.9em;
+      font-size: 0.82em;
       font-weight: 500;
-      transition: opacity 0.2s ease-in-out, transform 0.1s ease;
-      min-width: 200px; /* Ensure buttons have a decent width */
-      box-sizing: border-box;
-    }
-    .button-link:hover {
-        opacity: 0.85;
-    }
-    .button-link:active {
-        transform: scale(0.98);
+      transition: all var(--transition);
     }
 
-    .studio-button {
-      background-color: #4285F4; /* Google Blue */
+    .help-link:hover {
+      opacity: 0.85;
+      transform: translateY(-1px);
     }
 
-    .youtube-button {
-      background-color: #FF0000; /* YouTube Red */
+    .help-link.studio {
+      background: linear-gradient(135deg, #4285F4, #6366f1);
     }
 
+    .help-link.youtube {
+      background: linear-gradient(135deg, #FF0000, #cc0000);
+    }
+
+    /* ─── Theme Toggle ─── */
+    .title-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      margin-bottom: 28px;
+    }
+
+    .title-row h1 { margin-bottom: 0; }
+
+    .theme-toggle {
+      position: absolute;
+      right: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: 8px;
+      padding: 6px;
+      cursor: pointer;
+      transition: all var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 0;
+    }
+
+    .theme-toggle:hover {
+      background: var(--surface-hover);
+      color: var(--text);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .theme-icon-sun { display: block; }
+    .theme-icon-moon { display: none; }
+    [data-theme="light"] .theme-icon-sun { display: none; }
+    [data-theme="light"] .theme-icon-moon { display: block; }
+
+    /* ─── Light Theme ─── */
+    [data-theme="light"] {
+      --bg: #f7f8fa;
+      --surface: #ffffff;
+      --surface-hover: #f0f1f3;
+      --border: rgba(0, 0, 0, 0.1);
+      --border-focus: rgba(99, 102, 241, 0.5);
+      --text: #1a1d27;
+      --text-muted: #4b5563;
+      --text-dim: #9ca3af;
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --accent-glow: rgba(99, 102, 241, 0.1);
+      --green: #059669;
+      --red: #dc2626;
+    }
+
+    [data-theme="light"] select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%234b5563' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Code Analyzer Settings</h1>
-    
-    <label for="apiKey">Gemini API Key:</label>
-    <input type="password" id="apiKey" placeholder="Enter your Gemini API Key" autocomplete="off">
-    
-    <button id="saveKey">Save API Key</button> 
-    
-    <div id="status"></div> 
-    
-    <div class="help-links-container">
+    <div class="title-row">
+      <h1>Code Analyzer Settings</h1>
+      <button id="themeToggle" class="theme-toggle" type="button" title="Toggle light/dark mode">
+        <svg class="theme-icon-sun" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+        <svg class="theme-icon-moon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="settings-card">
+      <h2>API Configuration</h2>
+      <label for="apiKey">Gemini API Key</label>
+      <input type="password" id="apiKey" placeholder="Enter your Gemini API Key" autocomplete="off">
+
+      <label for="modelSelect">Gemini Model</label>
+      <select id="modelSelect">
+        <option value="gemini-2.5-flash">Gemini 2.5 Flash (Fast)</option>
+        <option value="gemini-2.5-pro">Gemini 2.5 Pro (Detailed)</option>
+        <option value="gemini-2.0-flash">Gemini 2.0 Flash (Legacy)</option>
+      </select>
+      <p class="model-hint">Flash is faster and cheaper. Pro gives more detailed analysis.</p>
+
+      <button id="saveKey" class="save-button">Save Settings</button>
+      <div id="status"></div>
+    </div>
+
+    <div class="settings-card help-section">
       <p>Need help getting your API Key?</p>
-      <a href="https://aistudio.google.com/apikey" target="_blank" class="button-link studio-button">Get Key from Google AI Studio</a>
-      <a href="https://www.youtube.com/watch?v=mQtyZ91QkGU" target="_blank" class="button-link youtube-button">Watch Video Tutorial (YouTube)</a>
+      <div class="help-links">
+        <a href="https://aistudio.google.com/apikey" target="_blank" class="help-link studio">Get Key from AI Studio</a>
+        <a href="https://www.youtube.com/watch?v=mQtyZ91QkGU" target="_blank" class="help-link youtube">Video Tutorial</a>
+      </div>
     </div>
   </div>
 

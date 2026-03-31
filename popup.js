@@ -1,5 +1,11 @@
+
 document.addEventListener('DOMContentLoaded', () => {
-    const GEMINI_MODEL = 'gemini-2.5-flash';
+    // Apply saved theme immediately to prevent flash
+    chrome.storage.local.get(['theme'], (result) => {
+        document.documentElement.setAttribute('data-theme', result.theme || 'dark');
+    });
+
+    const DEFAULT_MODEL = 'gemini-2.5-flash';
     const NON_CODE_PATTERNS = [
         /it seems the code you intended to provide is missing/i,
         /please provide the python code/i,
@@ -32,21 +38,47 @@ document.addEventListener('DOMContentLoaded', () => {
     const timeComplexityValueEl = document.getElementById('timeComplexityValue');
     const spaceComplexityValueEl = document.getElementById('spaceComplexityValue');
     const complexityDirectOutputEl = document.getElementById('complexityDirectOutput');
-    const resultsEl = document.getElementById('results'); // This is your general results/instruction area
+    const resultsEl = document.getElementById('results');
 
     const tcGraphCanvas = document.getElementById('tcGraph');
     const scGraphCanvas = document.getElementById('scGraph');
     const tcGraphLabel = document.getElementById('tcGraphLabel');
     const scGraphLabel = document.getElementById('scGraphLabel');
     const copyResultsButton = document.getElementById('copyResults');
+    const copyComplexityButton = document.getElementById('copyComplexity');
+    const analysisAnimationEl = document.getElementById('analysisAnimation');
+    const analysisStatusTextEl = document.getElementById('analysisStatusText');
+    const animCodeBody = document.getElementById('animCodeBody');
+
+    // Manual code input elements
+    const toggleManualCodeButton = document.getElementById('toggleManualCode');
+    const clearManualCodeButton = document.getElementById('clearManualCode');
+    const manualCodeInput = document.getElementById('manualCodeInput');
+
+    const themeToggleButton = document.getElementById('themeToggle');
+    const allActionButtons = document.querySelectorAll('.action-button');
 
     let geminiApiKey = null;
+    let geminiModel = DEFAULT_MODEL;
     let currentCodeFromDom = "";
     let currentProblemContext = "";
     let isApiKeyEditorVisible = false;
     let isExtractedCodeVisible = false;
+    let isManualCodeVisible = false;
+    let isAnalyzing = false;
+    let lastPromptType = null;
+    let lastCode = null;
+    let lastProblemCtx = null;
     const MIN_CODE_LENGTH = 10;
     const MIN_CONTEXT_LENGTH = 40;
+
+    const ANALYSIS_STATUS_MESSAGES = [
+        "Analyzing your code...",
+        "Parsing code structure...",
+        "Evaluating complexity...",
+        "Checking patterns...",
+        "Almost there...",
+    ];
 
     // ─── Complexity Graph Drawing ───
     const COMPLEXITY_ORDER = [
@@ -71,7 +103,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (s.includes('o(2^n)') || s.includes('o(2ⁿ)') || s.includes('o(2n)')) return 'O(2ⁿ)';
         if (s.includes('o(n!)')) return 'O(n!)';
         if (s.includes('o(n)')) return 'O(n)';
-        // Multi-variable products: O(n*m), O(t*n), etc. → linear in total input
         if (/o\([a-z]\*[a-z]\)/.test(s)) return 'O(n)';
         return null;
     }
@@ -93,9 +124,9 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.clearRect(0, 0, W, H);
 
         const highlightIdx = COMPLEXITY_ORDER.findIndex(c => c.label === highlightLabel);
+        const isLight = document.documentElement.getAttribute('data-theme') === 'light';
 
-        // Grid lines
-        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+        ctx.strokeStyle = isLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.06)';
         ctx.lineWidth = 1;
         for (let i = 0; i <= 4; i++) {
             const y = pad.top + (gh / 4) * i;
@@ -111,7 +142,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const capIdx = Math.min(highlightIdx + 2, COMPLEXITY_ORDER.length - 1);
         const visibleComplexities = COMPLEXITY_ORDER.slice(0, Math.max(capIdx + 1, 4));
 
-        // Use log scale so smaller curves don't get crushed
         let rawMax = 0;
         visibleComplexities.forEach(c => {
             const val = c.fn(nMax);
@@ -126,13 +156,12 @@ document.addEventListener('DOMContentLoaded', () => {
             return pad.top + gh - (Math.log(val + 1) / logMax) * gh;
         }
 
-        // Draw each curve
         const labelPositions = [];
         visibleComplexities.forEach((c) => {
             const isHighlight = highlightIdx >= 0 && c.label === highlightLabel;
             ctx.beginPath();
             ctx.lineWidth = isHighlight ? 2.5 : 1.2;
-            ctx.strokeStyle = isHighlight ? accentColor : 'rgba(255,255,255,0.12)';
+            ctx.strokeStyle = isHighlight ? accentColor : (isLight ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.12)');
 
             if (isHighlight) {
                 ctx.shadowColor = accentColor;
@@ -153,7 +182,6 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.stroke();
             ctx.shadowBlur = 0;
 
-            // Compute label Y, push away from previous labels
             let ly = toY(c.fn(nMax)) - 3;
             ly = Math.max(ly, pad.top + 8);
             const minGap = 11;
@@ -166,13 +194,12 @@ document.addEventListener('DOMContentLoaded', () => {
             labelPositions.push(ly);
 
             ctx.font = `${isHighlight ? '600' : '400'} ${isHighlight ? '9px' : '8px'} Inter, sans-serif`;
-            ctx.fillStyle = isHighlight ? accentColor : 'rgba(255,255,255,0.25)';
+            ctx.fillStyle = isHighlight ? accentColor : (isLight ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.25)');
             ctx.textAlign = 'right';
             ctx.textBaseline = 'bottom';
             ctx.fillText(c.label, pad.left + gw - 2, ly);
         });
 
-        // Fill area under highlighted curve
         if (highlightIdx >= 0) {
             const c = COMPLEXITY_ORDER[highlightIdx];
             ctx.beginPath();
@@ -193,8 +220,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.fill();
         }
 
-        // Axes
-        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.strokeStyle = isLight ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.15)';
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(pad.left, pad.top);
@@ -202,8 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.lineTo(pad.left + gw, pad.top + gh);
         ctx.stroke();
 
-        // Axis labels
-        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillStyle = isLight ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.3)';
         ctx.font = '400 8px Inter, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
@@ -225,7 +250,7 @@ document.addEventListener('DOMContentLoaded', () => {
             COMPLEXITY_ORDER.forEach((_, i) => {
                 ctx.fillStyle = i === highlightIdx
                     ? ratingColors[i]
-                    : 'rgba(255,255,255,0.06)';
+                    : (isLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.06)');
                 const rx = pad.left + i * segW + 1;
                 ctx.fillRect(rx, barY, segW - 2, barH);
             });
@@ -240,27 +265,124 @@ document.addEventListener('DOMContentLoaded', () => {
             tcGraphLabel.textContent = tc || tcText || '—';
             scGraphLabel.textContent = sc || scText || '—';
 
-            drawComplexityGraph(tcGraphCanvas, tc, 'rgb(96, 165, 250)');
-            drawComplexityGraph(scGraphCanvas, sc, 'rgb(52, 211, 153)');
+            const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+            const blueAccent = isLight ? 'rgb(37, 99, 235)' : 'rgb(96, 165, 250)';
+            const greenAccent = isLight ? 'rgb(5, 150, 105)' : 'rgb(52, 211, 153)';
+            drawComplexityGraph(tcGraphCanvas, tc, blueAccent);
+            drawComplexityGraph(scGraphCanvas, sc, greenAccent);
         } catch (e) {
             console.error("[Popup] Error rendering complexity graphs:", e);
         }
     }
 
-    function refreshUIStates() {
+    // ─── Analysis Animation ───
+    let statusRotationInterval = null;
 
-        //The !! (double exclamation mark) is a common JavaScript idiom that converts any value to its corresponding boolean value (true or false).
-        //geminiApiKey could be null, undefined, an empty string, or a string containing the API key.
-        //The expression !!geminiApiKey will be:
-    //    true if geminiApiKey is any "truthy" value (for example, a non-empty string containing an API key).
-    //   false if geminiApiKey is "falsy" (for example, null, undefined, "" (empty string), 0, or false).
+    // Basic syntax highlight keywords for the animation
+    const HIGHLIGHT_KEYWORDS = new Set([
+        'function','def','class','return','if','else','elif','for','while',
+        'switch','case','try','catch','finally','const','let','var','public',
+        'private','static','void','async','await','import','from','new',
+        'int','float','double','char','string','bool','boolean','long',
+        'struct','enum','interface','extends','implements','throw','throws',
+        'break','continue','do','in','of','with','yield','lambda','pass',
+        'self','this','null','None','true','false','True','False','println',
+        'printf','cout','cin','include','using','namespace','template','typedef'
+    ]);
+
+    function highlightCodeLine(text) {
+        // Escape HTML
+        const escaped = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        // Highlight keywords, strings, numbers, and comments
+        return escaped
+            .replace(/(\/\/.*$|#.*$)/gm, '<span class="anim-comment">$1</span>')
+            .replace(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g, '<span class="anim-str">$1</span>')
+            .replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="anim-num">$1</span>')
+            .replace(/\b([a-zA-Z_]\w*)\s*(?=\()/g, '<span class="anim-fn">$1</span>')
+            .replace(new RegExp('\\b(' + Array.from(HIGHLIGHT_KEYWORDS).join('|') + ')\\b', 'g'), '<span class="anim-kw">$1</span>');
+    }
+
+    function buildAnimCodeLines(code) {
+        const MAX_LINES = 7;
+        const lines = (code || '').split('\n').slice(0, MAX_LINES);
+        // Remove existing code lines (keep the scan-line)
+        const scanLine = animCodeBody.querySelector('.anim-scan-line');
+        animCodeBody.innerHTML = '';
+
+        lines.forEach((line, i) => {
+            const div = document.createElement('div');
+            div.className = 'anim-line';
+            div.style.setProperty('--i', i);
+            const ln = `<span class="anim-ln">${i + 1}</span>`;
+            div.innerHTML = ln + highlightCodeLine(line);
+            animCodeBody.appendChild(div);
+        });
+
+        // Re-add scan line
+        const newScan = document.createElement('div');
+        newScan.className = 'anim-scan-line';
+        animCodeBody.appendChild(newScan);
+    }
+
+    function showAnalysisAnimation(promptType, code) {
+        const labels = {
+            complexityOnly: "Calculating complexity...",
+            explainComplexity: "Analyzing complexity in detail...",
+            feedback: "Reviewing code quality...",
+            extraTestCases: "Generating test cases...",
+            alternateApproaches: "Finding alternate approaches...",
+            hints: "Preparing hints...",
+        };
+        analysisStatusTextEl.textContent = labels[promptType] || "Analyzing your code...";
+        buildAnimCodeLines(code);
+        // Override the inline !important to show
+        analysisAnimationEl.style.cssText = 'display: flex;';
+        resultsEl.style.display = 'none';
+        complexityDirectOutputEl.style.display = 'none';
+        copyResultsButton.style.display = 'none';
+
+        // Rotate status messages
+        let msgIndex = 0;
+        clearInterval(statusRotationInterval);
+        statusRotationInterval = setInterval(() => {
+            msgIndex = (msgIndex + 1) % ANALYSIS_STATUS_MESSAGES.length;
+            analysisStatusTextEl.textContent = ANALYSIS_STATUS_MESSAGES[msgIndex];
+        }, 3000);
+    }
+
+    function hideAnalysisAnimation() {
+        analysisAnimationEl.style.cssText = 'display: none !important;';
+        clearInterval(statusRotationInterval);
+    }
+
+    // ─── Button State Management ───
+    function setAnalyzingState(activeButton) {
+        isAnalyzing = true;
+        allActionButtons.forEach(btn => {
+            btn.disabled = true;
+            btn.classList.remove('is-active');
+        });
+        if (activeButton) {
+            activeButton.classList.add('is-active');
+        }
+    }
+
+    function clearAnalyzingState() {
+        isAnalyzing = false;
         const hasApiKey = !!geminiApiKey;
-        getComplexityOnlyButton.disabled = !hasApiKey;
-        explainComplexityButton.disabled = !hasApiKey;
-        getCodeFeedbackButton.disabled = !hasApiKey;
-        getExtraTestCasesButton.disabled = !hasApiKey;
-        getAlternateApproachesButton.disabled = !hasApiKey;
-        getHintsButton.disabled = !hasApiKey;
+        allActionButtons.forEach(btn => {
+            btn.disabled = !hasApiKey;
+            btn.classList.remove('is-active');
+        });
+    }
+
+    function refreshUIStates() {
+        const hasApiKey = !!geminiApiKey;
+        if (!isAnalyzing) {
+            allActionButtons.forEach(btn => {
+                btn.disabled = !hasApiKey;
+            });
+        }
         apiKeyInput.value = geminiApiKey || "";
 
         if (!hasApiKey) {
@@ -281,18 +403,25 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleApiKeyEditorButton.textContent = isApiKeyEditorVisible ? 'Hide API Key Editor' : 'Edit API Key';
         extractedCodePreviewEl.classList.toggle('is-collapsed', !isExtractedCodeVisible);
         toggleExtractedCodeButton.textContent = isExtractedCodeVisible ? 'Hide Code' : 'Show Code';
+        manualCodeInput.classList.toggle('is-collapsed', !isManualCodeVisible);
+        toggleManualCodeButton.textContent = isManualCodeVisible ? 'Hide' : 'Paste Code';
+        clearManualCodeButton.style.display = isManualCodeVisible ? 'inline-block' : 'none';
     }
-    
-    // Initial message is set in HTML. Ensure the correct div is visible.
-    resultsEl.style.display = 'block'; 
+
+    // Initial state
+    resultsEl.style.display = 'block';
     complexityDirectOutputEl.style.display = 'none';
 
-    chrome.storage.local.get(['geminiApiKey'], (result) => {
+    chrome.storage.local.get(['geminiApiKey', 'geminiModel'], (result) => {
         if (result.geminiApiKey) {
             geminiApiKey = result.geminiApiKey;
             console.log("[Popup] API Key loaded.");
         } else {
             console.log("[Popup] API Key not found in storage.");
+        }
+        if (result.geminiModel) {
+            geminiModel = result.geminiModel;
+            console.log("[Popup] Model loaded:", geminiModel);
         }
         refreshUIStates();
     });
@@ -323,11 +452,48 @@ document.addEventListener('DOMContentLoaded', () => {
             sendResponse({status: "Popup updated page DOM code"});
             return true;
         }
+        // Handle context menu trigger from background
+        if (message.action === "analyzeFromContextMenu") {
+            const code = message.text || "";
+            if (code.trim()) {
+                manualCodeInput.value = code;
+                callGeminiApi(code, getProblemContextForAnalysis(), 'explainComplexity', explainComplexityButton);
+            }
+            sendResponse({status: "ok"});
+            return true;
+        }
     });
 
     toggleExtractedCodeButton.addEventListener('click', () => {
         isExtractedCodeVisible = !isExtractedCodeVisible;
         refreshUIStates();
+    });
+
+    toggleManualCodeButton.addEventListener('click', () => {
+        isManualCodeVisible = !isManualCodeVisible;
+        refreshUIStates();
+        if (isManualCodeVisible) {
+            manualCodeInput.focus();
+        }
+    });
+
+    clearManualCodeButton.addEventListener('click', () => {
+        manualCodeInput.value = '';
+        manualCodeInput.focus();
+    });
+
+    // ─── Theme Toggle ───
+    themeToggleButton.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme') || 'dark';
+        const next = current === 'light' ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', next);
+        chrome.storage.local.set({ theme: next });
+        // Re-render complexity graphs if visible
+        if (complexityDirectOutputEl.style.display !== 'none') {
+            const tc = timeComplexityValueEl.textContent;
+            const sc = spaceComplexityValueEl.textContent;
+            if (tc || sc) renderComplexityGraphs(tc, sc);
+        }
     });
 
     toggleApiKeyEditorButton.addEventListener('click', () => {
@@ -361,20 +527,30 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    copyResultsButton.addEventListener('click', async () => {
-        const text = resultsEl.innerText || resultsEl.textContent || '';
+    // ─── Copy Handlers ───
+    function handleCopy(button, textGetter) {
+        const text = textGetter();
         if (!text.trim()) return;
-        try {
-            await navigator.clipboard.writeText(text);
-            copyResultsButton.textContent = 'Copied!';
-            copyResultsButton.classList.add('copied');
+        navigator.clipboard.writeText(text).then(() => {
+            button.textContent = 'Copied!';
+            button.classList.add('copied');
             setTimeout(() => {
-                copyResultsButton.textContent = 'Copy';
-                copyResultsButton.classList.remove('copied');
+                button.textContent = 'Copy';
+                button.classList.remove('copied');
             }, 1500);
-        } catch (e) {
-            console.error("[Popup] Copy failed:", e);
-        }
+        }).catch(e => console.error("[Popup] Copy failed:", e));
+    }
+
+    copyResultsButton.addEventListener('click', () => {
+        handleCopy(copyResultsButton, () => resultsEl.innerText || resultsEl.textContent || '');
+    });
+
+    copyComplexityButton.addEventListener('click', () => {
+        handleCopy(copyComplexityButton, () => {
+            const tc = timeComplexityValueEl.textContent || 'N/A';
+            const sc = spaceComplexityValueEl.textContent || 'N/A';
+            return `Time Complexity: ${tc}\nSpace Complexity: ${sc}`;
+        });
     });
 
     refreshCodePreviewButton.addEventListener('click', async () => {
@@ -389,7 +565,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (code && code.trim()) {
             extractedCodePreviewEl.textContent = code;
         } else {
-            extractedCodePreviewEl.textContent = 'No code extracted from the live page DOM yet.';
+            extractedCodePreviewEl.textContent = 'No code extracted from the live page DOM yet. Use "Paste Code" to input manually.';
         }
     }
 
@@ -400,13 +576,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function isLikelyCode(text) {
         const trimmed = (text || "").trim();
-        if (!trimmed) {
-            return false;
-        }
+        if (!trimmed) return false;
 
-        if (NON_CODE_PATTERNS.some((pattern) => pattern.test(trimmed))) {
-            return false;
-        }
+        if (NON_CODE_PATTERNS.some((pattern) => pattern.test(trimmed))) return false;
 
         const lines = trimmed.split('\n').map((line) => line.trim()).filter(Boolean);
         const hasCodeHint = CODE_HINT_PATTERNS.some((pattern) => pattern.test(trimmed));
@@ -440,25 +612,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function getCodeForAnalysis() {
+        // Prefer manual input if provided
+        const manualCode = (manualCodeInput.value || "").trim();
+        if (manualCode.length >= MIN_CODE_LENGTH && isLikelyCode(manualCode)) {
+            console.log(`[Popup] Using manually pasted code (${manualCode.length} chars).`);
+            return manualCode;
+        }
+
         let codeToAnalyze = (await refreshCodeFromPageDom() || currentCodeFromDom || "").trim();
-        let source = "page DOM";
 
         if (!isLikelyCode(codeToAnalyze) || codeToAnalyze.length < MIN_CODE_LENGTH) {
             console.log(`[Popup] No valid code extracted from DOM (${codeToAnalyze.length} chars).`);
             codeToAnalyze = "";
-            source = "no valid DOM code found";
         } else {
             console.log(`[Popup] Using code extracted from page DOM (${codeToAnalyze.length} chars).`);
         }
-        console.log(`[Popup] Code For Analysis (Source: ${source}, Length: ${codeToAnalyze.length}):\n<<<<<<\n${codeToAnalyze.substring(0,500)}\n>>>>>>`); // Log more for debugging
         return codeToAnalyze;
     }
 
     function getProblemContextForAnalysis() {
         const context = (currentProblemContext || '').trim();
-        if (context.length >= MIN_CONTEXT_LENGTH) {
-            return context;
-        }
+        if (context.length >= MIN_CONTEXT_LENGTH) return context;
         return '';
     }
 
@@ -500,17 +674,36 @@ Structure your response as:
 
 Code:\n\n${code}`;
             case 'feedback':
-                return `Review this code for quality. Be direct and actionable.
+                return `You are an experienced interviewer reviewing a candidate's code. Evaluate it for quality as it would appear in a coding interview.
 ${FORMAT_RULES}
 
-Structure your response as:
-## Issues
+Structure your response EXACTLY as follows:
+
+## Code Quality Score: X/10
+
+(Replace X with a score from 1-10 based on these interview criteria:
+- **Clarity & Readability** — clean variable names, logical structure, easy to follow
+- **Correctness** — handles edge cases, no bugs
+- **Efficiency** — optimal or near-optimal approach
+- **Code Style** — consistent formatting, proper indentation, no unnecessary code
+- **Best Practices** — idiomatic patterns, no anti-patterns, proper use of language features)
+
+Show a one-line breakdown: e.g. "Clarity: 8 | Correctness: 9 | Efficiency: 7 | Style: 8 | Best Practices: 7"
+
+## Verdict
+- If the code scores 8 or above: Start with a genuine appreciation like "Great job! This is clean, well-structured code." and highlight what the candidate did well.
+- If the code scores 5-7: Acknowledge the working solution but point out key areas to improve.
+- If the code scores below 5: Be constructive — note what works and what needs significant improvement.
+
+## Issues (if any)
 - Bullet each problem: what's wrong and a one-line fix.
+- Skip this section entirely if there are no issues.
 
-## Improvements
+## Improvements (if any)
 - Bullet each suggestion: what to improve and why (efficiency, readability, best practice).
+- Skip this section entirely if the code is already excellent.
 
-Keep it to 4-6 bullets total. No generic advice. Only mention what applies to this specific code.
+Keep it to 4-6 bullets total across Issues and Improvements. No generic advice. Only mention what applies to this specific code.
 
 Code:\n\n${code}`;
             case 'extraTestCases':
@@ -526,7 +719,7 @@ You MUST format each test case EXACTLY like this Markdown template:
 
 ---
 
-### Test Case 1 — 🟢 Easy — *(short reason)*
+### Test Case 1 — Easy — *(short reason)*
 
 **Input:**
 \`\`\`
@@ -543,13 +736,13 @@ You MUST format each test case EXACTLY like this Markdown template:
 
 ---
 
-### Test Case 2 — 🟡 Medium — *(short reason)*
+### Test Case 2 — Medium — *(short reason)*
 
 (same structure)
 
 ---
 
-### Test Case 3 — 🔴 Hard — *(short reason)*
+### Test Case 3 — Hard — *(short reason)*
 
 (same structure)
 
@@ -598,7 +791,7 @@ Instructions:
    - Consider correctness, edge cases, and whether it would pass all test cases.
 
 2. If the code is CORRECT and complete:
-   - Respond ONLY with a short congratulatory message like: "✅ Your code looks correct! Great job solving this problem."
+   - Respond ONLY with a short congratulatory message like: "Your code looks correct! Great job solving this problem."
    - Do NOT add hints, suggestions, or improvements.
 
 3. If the code is INCORRECT, INCOMPLETE, or the candidate is clearly stuck:
@@ -625,7 +818,34 @@ Rules:
         }
     }
 
-    async function callGeminiApi(code, problemContext, promptType) {
+    function scrollToResults() {
+        const target = complexityDirectOutputEl.style.display !== 'none'
+            ? complexityDirectOutputEl
+            : resultsEl;
+        setTimeout(() => {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 50);
+    }
+
+    function showErrorWithRetry(message) {
+        resultsEl.innerHTML = `
+            <p>${message}</p>
+            <button class="retry-button" id="retryButton" type="button">Retry Analysis</button>
+        `;
+        resultsEl.className = 'result-content error fade-in';
+        resultsEl.style.display = 'block';
+        complexityDirectOutputEl.style.display = 'none';
+
+        const retryBtn = document.getElementById('retryButton');
+        if (retryBtn && lastPromptType && lastCode !== null) {
+            retryBtn.addEventListener('click', () => {
+                const activeBtn = document.querySelector(`.action-button[data-action="${lastPromptType}"]`);
+                callGeminiApi(lastCode, lastProblemCtx, lastPromptType, activeBtn);
+            });
+        }
+    }
+
+    async function callGeminiApi(code, problemContext, promptType, activeButton) {
         if (!geminiApiKey) {
             resultsEl.innerHTML = 'Gemini API Key is not set. Please set it in the extension options.';
             resultsEl.className = 'result-content error';
@@ -648,36 +868,38 @@ Rules:
 
         if (!code || code.trim() === "") {
             resultsEl.innerHTML = `
-                <p>Open a webpage that contains code, then click this extension's icon.</p>
-                <p>The extension will extract code directly from the page DOM and analyze it.</p>
-                <br>
-                <p class="supported-sites-info">Works perfectly on platforms like LeetCode, GFG (GeeksforGeeks), CodeChef, Codeforces, etc.</p>
-                <p style="color: red; font-weight: bold; margin-top: 10px;">No valid code block was found in the page DOM for analysis.</p>
+                <p>No valid code block was found for analysis.</p>
+                <p>Try using <strong>Paste Code</strong> to input your code manually, or open a coding platform and click <strong>Refresh Preview</strong>.</p>
             `;
-            resultsEl.className = 'result-content';
+            resultsEl.className = 'result-content error';
             resultsEl.style.display = 'block';
             complexityDirectOutputEl.style.display = 'none';
             return;
         }
-        
+
+        // Save for retry
+        lastPromptType = promptType;
+        lastCode = code;
+        lastProblemCtx = problemContext;
+
         // Prepare UI for loading
+        setAnalyzingState(activeButton);
+        showAnalysisAnimation(promptType, code);
         timeComplexityValueEl.textContent = '';
         spaceComplexityValueEl.textContent = '';
-        resultsEl.innerHTML = 'Analyzing...';
-        resultsEl.className = 'result-content loading';
-        resultsEl.style.display = 'block';
-        complexityDirectOutputEl.style.display = 'none';
         copyResultsButton.style.display = 'none';
 
         const prompt = buildPrompt(code, problemContext, promptType);
         if (!prompt) {
+            hideAnalysisAnimation();
+            clearAnalyzingState();
             resultsEl.innerHTML = 'Invalid analysis type.';
             resultsEl.className = 'result-content error';
             resultsEl.style.display = 'block';
             return;
         }
 
-        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent`;
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`;
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 30000);
         try {
@@ -691,21 +913,21 @@ Rules:
                 signal: controller.signal,
             });
             clearTimeout(timeout);
+            hideAnalysisAnimation();
+            clearAnalyzingState();
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
                 if (response.status === 429) {
-                    resultsEl.innerHTML = 'API rate limit exceeded. Please wait a minute and try again.';
+                    showErrorWithRetry('API rate limit exceeded. Please wait a minute and try again.');
                 } else {
-                    resultsEl.innerHTML = `Error from Gemini API (${GEMINI_MODEL}): ${errorData.error?.message || response.statusText}`;
+                    showErrorWithRetry(`Error from Gemini API (${geminiModel}): ${errorData.error?.message || response.statusText}`);
                 }
-                resultsEl.className = 'result-content error';
-                resultsEl.style.display = 'block';
                 return;
             }
 
             const data = await response.json();
-            resultsEl.className = 'result-content'; // Reset class from loading/error
+            resultsEl.className = 'result-content fade-in';
 
             if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
                 let rawText = data.candidates[0].content.parts[0].text.trim();
@@ -719,6 +941,7 @@ Rules:
                     timeComplexityValueEl.textContent = tcVal;
                     spaceComplexityValueEl.textContent = scVal;
                     complexityDirectOutputEl.style.display = 'block';
+                    complexityDirectOutputEl.classList.add('fade-in');
                     resultsEl.style.display = 'none';
                     renderComplexityGraphs(tcVal, scVal);
                 } else {
@@ -727,51 +950,49 @@ Rules:
                     complexityDirectOutputEl.style.display = 'none';
                     copyResultsButton.style.display = 'block';
                 }
+                scrollToResults();
             } else if (data.promptFeedback && data.promptFeedback.blockReason) {
-                resultsEl.innerHTML = `Blocked by API: ${data.promptFeedback.blockReason.reason || 'Unknown'}. ${data.promptFeedback.blockReason.message || ''}`;
-                resultsEl.className = 'result-content error';
-                resultsEl.style.display = 'block';
+                showErrorWithRetry(`Blocked by API: ${data.promptFeedback.blockReason.reason || 'Unknown'}. ${data.promptFeedback.blockReason.message || ''}`);
             } else {
-                resultsEl.innerHTML = 'Could not parse response from Gemini API. Unexpected structure.';
-                resultsEl.className = 'result-content error';
-                resultsEl.style.display = 'block';
+                showErrorWithRetry('Could not parse response from Gemini API. Unexpected structure.');
             }
         } catch (error) {
             clearTimeout(timeout);
+            hideAnalysisAnimation();
+            clearAnalyzingState();
             if (error.name === 'AbortError') {
-                resultsEl.innerHTML = 'Request timed out after 30 seconds. Check your connection and try again.';
+                showErrorWithRetry('Request timed out after 30 seconds. Check your connection and try again.');
             } else {
-                resultsEl.innerHTML = `Failed to connect to Gemini API: ${error.message}`;
+                showErrorWithRetry(`Failed to connect to Gemini API: ${error.message}`);
             }
-            resultsEl.className = 'result-content error';
-            resultsEl.style.display = 'block';
         }
     }
 
+    // ─── Action Button Handlers ───
     getComplexityOnlyButton.addEventListener('click', async () => {
         const code = await getCodeForAnalysis();
-        callGeminiApi(code, getProblemContextForAnalysis(), 'complexityOnly');
+        callGeminiApi(code, getProblemContextForAnalysis(), 'complexityOnly', getComplexityOnlyButton);
     });
     explainComplexityButton.addEventListener('click', async () => {
         const code = await getCodeForAnalysis();
-        callGeminiApi(code, getProblemContextForAnalysis(), 'explainComplexity');
+        callGeminiApi(code, getProblemContextForAnalysis(), 'explainComplexity', explainComplexityButton);
     });
     getCodeFeedbackButton.addEventListener('click', async () => {
         const code = await getCodeForAnalysis();
-        callGeminiApi(code, getProblemContextForAnalysis(), 'feedback');
+        callGeminiApi(code, getProblemContextForAnalysis(), 'feedback', getCodeFeedbackButton);
     });
     getExtraTestCasesButton.addEventListener('click', async () => {
         const code = await getCodeForAnalysis();
-        callGeminiApi(code, getProblemContextForAnalysis(), 'extraTestCases');
+        callGeminiApi(code, getProblemContextForAnalysis(), 'extraTestCases', getExtraTestCasesButton);
     });
     getAlternateApproachesButton.addEventListener('click', async () => {
         const code = await getCodeForAnalysis();
-        callGeminiApi(code, getProblemContextForAnalysis(), 'alternateApproaches');
+        callGeminiApi(code, getProblemContextForAnalysis(), 'alternateApproaches', getAlternateApproachesButton);
     });
     getHintsButton.addEventListener('click', async () => {
         const code = await getCodeForAnalysis();
-        callGeminiApi(code, getProblemContextForAnalysis(), 'hints');
+        callGeminiApi(code, getProblemContextForAnalysis(), 'hints', getHintsButton);
     });
 
-    refreshUIStates(); 
+    refreshUIStates();
 });

@@ -1,16 +1,33 @@
 document.addEventListener('DOMContentLoaded', () => {
   const apiKeyInput = document.getElementById('apiKey');
+  const modelSelect = document.getElementById('modelSelect');
   const saveButton = document.getElementById('saveKey');
   const statusDiv = document.getElementById('status');
+  const themeToggleButton = document.getElementById('themeToggle');
 
-  // Load saved API key
-  chrome.storage.local.get(['geminiApiKey'], (result) => {
+  // Apply saved theme
+  chrome.storage.local.get(['theme'], (result) => {
+    document.documentElement.setAttribute('data-theme', result.theme || 'dark');
+  });
+
+  themeToggleButton.addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    const next = current === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', next);
+    chrome.storage.local.set({ theme: next });
+  });
+
+  // Load saved settings
+  chrome.storage.local.get(['geminiApiKey', 'geminiModel'], (result) => {
     if (result.geminiApiKey) {
       apiKeyInput.value = result.geminiApiKey;
     }
+    if (result.geminiModel) {
+      modelSelect.value = result.geminiModel;
+    }
   });
 
-  // Save API key
+  // Save settings
   saveButton.addEventListener('click', () => {
     const apiKey = apiKeyInput.value.trim();
 
@@ -24,15 +41,18 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    chrome.storage.local.set({ geminiApiKey: apiKey }, () => {
-      showStatus('API Key saved successfully!', 'success');
+    chrome.storage.local.set({
+      geminiApiKey: apiKey,
+      geminiModel: modelSelect.value
+    }, () => {
+      showStatus('Settings saved successfully!', 'success');
     });
   });
 
   function showStatus(message, type = 'info') {
     statusDiv.textContent = message;
     statusDiv.className = type;
-    
+
     setTimeout(() => {
       statusDiv.textContent = '';
       statusDiv.className = '';

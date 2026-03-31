@@ -1,12 +1,38 @@
 // background.js
 let lastExtractedCode = "";
 let lastSourceTabId = null;
-let lastHtmlSnapshot = "";
 let lastProblemContext = "";
 
 // Open side panel when extension icon is clicked
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
   .catch((error) => console.error("[Background] Error setting side panel behavior:", error));
+
+// ─── Context Menu ───
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: "analyzeSelection",
+    title: "Analyze Selected Code",
+    contexts: ["selection"]
+  });
+});
+
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId === "analyzeSelection" && info.selectionText) {
+    // Open side panel first, then send the selected text
+    try {
+      await chrome.sidePanel.open({ tabId: tab.id });
+    } catch (e) {
+      // Side panel might already be open
+    }
+    // Small delay to let the side panel initialize
+    setTimeout(() => {
+      chrome.runtime.sendMessage({
+        action: "analyzeFromContextMenu",
+        text: info.selectionText
+      }).catch(() => {});
+    }, 500);
+  }
+});
 
 async function getPageAnalysisData(preferredTabId = null) {
   try {
@@ -34,8 +60,6 @@ async function getPageAnalysisData(preferredTabId = null) {
       target: { tabId: activeTab.id },
       world: 'MAIN',
       func: () => {
-        const htmlSnapshot = document.documentElement.outerHTML;
-
         function normalizeText(text) {
           return (text || '')
             .replace(/\u00a0/g, ' ')
@@ -551,7 +575,7 @@ async function getPageAnalysisData(preferredTabId = null) {
         const monacoModelCandidates = extractFromMonacoModels();
         const aceEditorCandidates = extractFromAceEditors();
         const liveCandidates = collectCandidates(document, { respectVisibility: true, includeSelection: true });
-        const parsedDoc = new DOMParser().parseFromString(htmlSnapshot, 'text/html');
+        const parsedDoc = new DOMParser().parseFromString(document.documentElement.outerHTML, 'text/html');
         const snapshotCandidates = collectCandidates(parsedDoc, { respectVisibility: false, includeSelection: false });
         const liveProblemContexts = collectProblemContext(document);
         const snapshotProblemContexts = collectProblemContext(parsedDoc);
@@ -560,13 +584,11 @@ async function getPageAnalysisData(preferredTabId = null) {
 
         return {
           code: bestCandidate?.text || '',
-          problemContext: bestProblemContext?.text || '',
-          htmlSnapshot
+          problemContext: bestProblemContext?.text || ''
         };
       },
     });
     if (injectionResults && injectionResults[0] && injectionResults[0].result) {
-      lastHtmlSnapshot = injectionResults[0].result.htmlSnapshot || "";
       return {
         code: injectionResults[0].result.code || "",
         problemContext: injectionResults[0].result.problemContext || ""
@@ -612,7 +634,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   }
 });
 
-// Live code polling — detect editor changes every 3 seconds and push to side panel
+// Live code polling — detect editor changes every 5 seconds and push to side panel
 let pollingInterval = null;
 
 function startCodePolling() {
@@ -636,7 +658,7 @@ function startCodePolling() {
     } catch (e) {
       // Tab may have been closed — ignore
     }
-  }, 3000);
+  }, 5000);
 }
 
 startCodePolling();
@@ -692,10 +714,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       sendResponse({ text: lastExtractedCode, problemContext: lastProblemContext });
     })();
-    return true;
-  }
-  if (message.action === "getHtmlSnapshot") {
-    sendResponse({ html: lastHtmlSnapshot });
     return true;
   }
   if (message.action === "updateExtractedCode") {

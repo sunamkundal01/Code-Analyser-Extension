@@ -1,63 +1,157 @@
 # Code Analyzer (Gemini) - Chrome Extension
 
-Quickly analyze code snippets from any webpage for time/space complexity and code quality using Google's Gemini API. Ideal for developers on platforms like LeetCode, GeeksforGeeks, CodeChef, and Codeforces.
+A Chrome extension that analyzes code snippets for **time/space complexity** and **code quality** using Google's Gemini API. Built for developers who practice on platforms like **LeetCode**, **GeeksforGeeks**, and **CodeChef**.
 
-## Key Features
+---
 
-*   **Complexity Analysis:** Get Big O notation for time and space complexity.
-*   **Detailed Explanations:** Understand how complexities are derived.
-*   **Code Quality Feedback:** Receive tips on readability, efficiency, and best practices.
+## Features
 
-*   **Secure API Key Storage:** Your Gemini API key is stored locally and securely.
+| Feature | Description |
+|---------|-------------|
+| **Get Complexity (TC & SC)** | Instant Big O notation for time and space complexity |
+| **Explain Complexity** | Step-by-step breakdown of how complexity is derived |
+| **Code Feedback** | Actionable tips on readability, efficiency, and best practices |
+| **Extra Test Cases** | Auto-generated Easy, Medium, and Hard test cases |
+| **Alternative Approaches** | Compare brute force to optimal solutions with trade-offs |
+| **Get Hints** | Interview-style hints without revealing the solution |
+| **Live Code Extraction** | Automatically detects code from Monaco, Ace, and CodeMirror editors |
+| **Manual Code Input** | Paste any code snippet for analysis |
+| **Complexity Graphs** | Visual canvas-based graphs for time and space complexity |
+| **Dark / Light Mode** | Toggle between themes with one click |
+| **Right-Click Analysis** | Select code on any page and analyze via context menu |
 
-## Quick Install
+---
 
-1.  **Download:** Get the `code-analyzer-extension` folder. Ensure it includes:
-    ```
-    manifest.json, popup.html, popup.css, popup.js, options.html, options.js, background.js, marked.min.js, images/ (with icons)
-    ```
-2.  **Open Chrome Extensions:** Go to `chrome://extensions`.
-3.  **Enable Developer Mode:** Toggle it on (usually top-right).
-4.  **Load Unpacked:** Click "Load unpacked" and select the `code-analyzer-extension` folder.
-    *   The extension icon will appear in your Chrome toolbar.
+## Installation
+
+1. **Download** or clone this repository:
+   ```
+   git clone https://github.com/sunamkundal01/Code-Analyser-Extension.git
+   ```
+
+2. Open **Chrome** and go to `chrome://extensions`
+
+3. Enable **Developer Mode** (toggle in the top-right corner)
+
+4. Click **Load unpacked** and select the project folder
+
+5. The extension icon will appear in your toolbar. Pin it for easy access.
+
+---
 
 ## How to Use
 
-1.  **Set Your Gemini API Key (One-time setup):**
-    *   Right-click the extension icon → "Options".
-    *   Paste your Gemini API Key and click "Save Key".
-    *   *(Need a key? See "Get Your Gemini API Key" below.)*
+### Step 1 - Set up your API Key (one-time)
 
-2.  **Analyze Code:**
-    *   Open any webpage that contains a code snippet you want to analyze.
-    *   Click the extension icon in your Chrome toolbar.
-    *   Choose an analysis option:
-        *   **Get Time/Space Complexity (O notation)**
-        *   **Explain Time/Space Complexity**
-        *   **Get Code Quality Feedback**
-    *   View results in the popup. Click "Close" when done.
+1. Click the extension icon to open the side panel
+2. Click **Edit API Key** and paste your Gemini API key
+3. Click **Save Key**
+
+> Don't have a key? Get one free from [Google AI Studio](https://aistudio.google.com/apikey)
+
+### Step 2 - Open a coding platform
+
+Navigate to any supported site (**LeetCode**, **GeeksforGeeks**, **CodeChef**) or any page with code. The extension automatically extracts code from the page.
+
+### Step 3 - Analyze
+
+Click any of the six analysis buttons:
+
+- **Get Complexity (TC & SC)** - Quick O-notation results with visual graphs
+- **Explain Complexity** - Detailed breakdown with per-loop/per-recursion analysis
+- **Code Feedback** - Issues and improvement suggestions
+- **Extra Test Cases** - 3 test cases at Easy / Medium / Hard levels
+- **Alternative Approaches** - Multiple approaches ranked from brute force to optimal
+- **Get Hints** - Nudges without spoiling the answer
+
+### Other ways to analyze
+
+- **Paste Code** - Click "Paste Code" to manually input a code snippet
+- **Right-Click** - Select code on any page, right-click, and choose "Analyze Selected Code"
+- **Keyboard Shortcut** - Press `Ctrl+Shift+E` (Mac: `Cmd+Shift+E`) to open the extension
+
+### Step 4 - Copy & Use
+
+Click the **Copy** button on any result to copy it to your clipboard.
+
+---
 
 ## Get Your Gemini API Key
 
-1.  Visit [Google AI Studio](https://aistudio.google.com/apikey).
-2.  Sign in and create a new API key.
-    *   This extension uses the `gemini-2.5-flash` model.
-3.  Copy the generated API key.
-4.  Paste it into the extension's "Options" page as described in "How to Use".
+1. Visit [Google AI Studio](https://aistudio.google.com/apikey)
+2. Sign in with your Google account
+3. Click **Create API Key**
+4. Copy the key and paste it into the extension
 
-## Notes & Troubleshooting
+The extension supports three Gemini models (configurable in Settings):
 
-*   **Extraction Issues on GFG, CodeChef, etc.?:** The extension extracts code directly from the page DOM. If a site uses a custom renderer, make sure the code block is visible on the page before opening the extension.
-*   **"API Key not set":** Ensure your key is saved in the extension's "Options".
-*   **API Errors:** Check your API key. You might have hit free tier limits (check Google AI Studio). Very long code snippets could also cause issues, but this is rare for typical selections.
+| Model | Best for |
+|-------|----------|
+| **Gemini 2.5 Flash** (default) | Fast responses, lower cost |
+| **Gemini 2.5 Pro** | More detailed and accurate analysis |
+| **Gemini 2.0 Flash** | Legacy, lighter model |
 
+---
 
-## Future Ideas
+## Supported Platforms
 
-*   User-selectable Gemini models.
-*   Hints for users stuck on coding problems.
-*   Analysis history.
+The extension auto-extracts code from editors on:
 
-## Attribution
+- **LeetCode** (Monaco Editor)
+- **GeeksforGeeks** (Ace Editor)
+- **CodeChef** (CodeMirror / Ace Editor)
+- Any page with `<pre>`, `<code>`, or standard code editor elements
 
-Made by Sunam
+---
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| "API Key not set" | Open the side panel and save your key via **Edit API Key**, or go to the extension's Options page |
+| No code detected | Click **Refresh Preview** or use **Paste Code** to input manually |
+| API errors / rate limits | Check your key is valid. Free tier has usage limits - check [Google AI Studio](https://aistudio.google.com/) |
+| Extension not opening | Make sure you're not on a `chrome://` or `edge://` internal page |
+
+---
+
+## Tech Stack
+
+- **Chrome Extension Manifest V3**
+- **Gemini API** (generativelanguage.googleapis.com)
+- **marked.js** for Markdown rendering
+- **Canvas API** for complexity graphs
+- **Chrome Storage API** for settings persistence
+
+---
+
+## Project Structure
+
+```
+Code-Analyser-Extension/
+  manifest.json        # Extension configuration
+  background.js        # Code extraction engine & live polling
+  popup.html           # Side panel UI
+  popup.css            # Styling with dark/light theme support
+  popup.js             # UI logic, API calls, graph rendering
+  options.html         # Settings page
+  options.js           # Settings save/load
+  marked.min.js        # Markdown parser library
+  icon.png             # Extension icon
+```
+
+---
+
+## Contact
+
+Made by **Sunam**
+
+- Email: [kundalsunam@gmail.com](mailto:kundalsunam@gmail.com)
+- GitHub: [github.com/sunamkundal01/Code-Analyser-Extension](https://github.com/sunamkundal01/Code-Analyser-Extension)
+- LinkedIn: [linkedin.com/in/sunamkundal](https://in.linkedin.com/in/sunamkundal)
+
+---
+
+## License
+
+This project is open source. Feel free to fork, modify, and use it.
