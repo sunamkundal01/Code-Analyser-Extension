@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const saveButton = document.getElementById('saveKey');
   const statusDiv = document.getElementById('status');
   const themeToggleButton = document.getElementById('themeToggle');
+  const modelCards = document.querySelectorAll('.model-card');
 
   // Apply saved theme
   chrome.storage.local.get(['theme'], (result) => {
@@ -17,6 +18,21 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.storage.local.set({ theme: next });
   });
 
+  // Model card selection
+  function selectModelCard(value) {
+    modelCards.forEach(card => {
+      card.classList.toggle('selected', card.dataset.value === value);
+      card.querySelector('input[type="radio"]').checked = card.dataset.value === value;
+    });
+    modelSelect.value = value;
+  }
+
+  modelCards.forEach(card => {
+    card.addEventListener('click', () => {
+      selectModelCard(card.dataset.value);
+    });
+  });
+
   // Load saved settings
   chrome.storage.local.get(['geminiApiKey', 'geminiModel'], (result) => {
     if (result.geminiApiKey) {
@@ -24,6 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (result.geminiModel) {
       modelSelect.value = result.geminiModel;
+      selectModelCard(result.geminiModel);
     }
   });
 

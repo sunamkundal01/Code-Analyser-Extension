@@ -56,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const manualCodeInput = document.getElementById('manualCodeInput');
 
     const themeToggleButton = document.getElementById('themeToggle');
+    const settingsButton = document.getElementById('settingsButton');
     const allActionButtons = document.querySelectorAll('.action-button');
 
     let geminiApiKey = null;
@@ -483,6 +484,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // ─── Theme Toggle ───
+    settingsButton.addEventListener('click', () => {
+        chrome.runtime.openOptionsPage();
+    });
+
     themeToggleButton.addEventListener('click', () => {
         const current = document.documentElement.getAttribute('data-theme') || 'dark';
         const next = current === 'light' ? 'dark' : 'light';
